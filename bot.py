@@ -9,7 +9,6 @@ def send_json(sock, message):
 
     message_size = len(json_bytes)
 
-    # Taille envoyée en entier binaire non signé sur 4 octets
     size_bytes = struct.pack("!I", message_size)
 
     sock.sendall(size_bytes)
@@ -17,7 +16,7 @@ def send_json(sock, message):
 
 
 def receive_json(sock):
-    # Lire exactement 4 octets pour connaître la taille
+    
     size_bytes = sock.recv(4)
 
     if not size_bytes:
@@ -25,7 +24,6 @@ def receive_json(sock):
 
     message_size = struct.unpack("!I", size_bytes)[0]
 
-    # Lire exactement message_size octets
     json_bytes = b""
 
     while len(json_bytes) < message_size:
@@ -40,3 +38,10 @@ def receive_json(sock):
     message = json.loads(json_string)
 
     return message
+def handle_message(sock):
+    message = receive_json(sock)
+    print("Message recu", message)
+    if message["request"]=="ping":
+        send_json(sock,{"response":"pong"})
+    elif message["request"]=="play":
+        send_json(sock,{"response" :"giveup"})
