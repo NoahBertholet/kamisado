@@ -1,5 +1,6 @@
 import json
 import struct
+import socket
 
 BOT_PORT = 8888
 
@@ -45,3 +46,19 @@ def handle_message(sock):
         send_json(sock,{"response":"pong"})
     elif message["request"]=="play":
         send_json(sock,{"response" :"giveup"})
+
+def start_bot_server():
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    server_socket.bind(("", BOT_PORT))
+    server_socket.listen()
+
+    print(f"Bot en écoute sur le port {BOT_PORT}")
+
+    while True:
+        client_socket, address = server_socket.accept()
+        print("Connexion reçue de :", address)
+
+        handle_message(client_socket)
+
+        client_socket.close()
