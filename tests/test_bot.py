@@ -8,6 +8,7 @@ from bot import send_json, receive_json, handle_message, build_subscribe_message
 
 
 def test_send_and_receive_json():
+
     socket_1, socket_2 = socket.socketpair()
 
     message = {
@@ -21,6 +22,7 @@ def test_send_and_receive_json():
     socket_2.close()
 
     assert received == message
+
 def test_handle_message_ping():
     socket_1, socket_2 = socket.socketpair()
 
@@ -83,3 +85,17 @@ def test_receive_json_incomplete_data():
     socket_2.close()
 
     assert result is None
+
+def test_choose_move_returns_none_when_no_piece_can_move():
+    state = {
+        "players": ["BERTHOFUSEE", "adversaire"],
+        "color": "blue",
+        "board": [
+            [[None, None] for _ in range(8)]
+            for _ in range(8)
+        ]
+    }
+
+    move = choose_move(state)
+
+    assert move is None
