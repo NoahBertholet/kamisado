@@ -1,9 +1,11 @@
+#import
 import json
 import struct
 import socket
 import threading
 import random
 
+#constantes
 BOT_PORT = 8888
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
@@ -39,6 +41,7 @@ funnylines = [
     "Aucune pression",
     "Tout est calculé... ou presque"
 ]
+
 def send_json(sock, message):
     json_string = json.dumps(message)
     json_bytes = json_string.encode("utf-8")
@@ -75,7 +78,8 @@ def receive_json(sock):
     return message
 
 def choose_move(state):
-    
+    print("STATE =",state)
+  
 def handle_message(sock):
     message = receive_json(sock)
     print("Message recu", message)
