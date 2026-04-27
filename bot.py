@@ -126,6 +126,12 @@ def choose_move(state):
 
         new_r += dr
         new_c += dc
+
+
+    if not moves:
+        return None
+    return random.choice(moves)
+
 def handle_message(sock):
     message = receive_json(sock)
     print("Message recu", message)
@@ -139,6 +145,7 @@ def handle_message(sock):
 
     elif message["request"] == "play":
         move = choose_move(message["state"])
+        print("Erreurs précédentes :", message.get("errors"))
 
         if move is None:
             send_json(sock, {"response": "giveup"})
