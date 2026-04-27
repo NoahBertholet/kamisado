@@ -1,6 +1,7 @@
 import socket
 import sys
 import os
+import struct
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from bot import send_json, receive_json, handle_message, build_subscribe_message, BOT_PORT
@@ -66,11 +67,11 @@ def test_receive_json_no_data():
     socket_2.close()
 
     assert result is None
-    
+
 def test_receive_json_incomplete_data():
     socket_1, socket_2 = socket.socketpair()
 
-    # envoyer seulement la taille (par exemple 10 octets attendus)
+    
     size_bytes = struct.pack("I", 10)
     socket_1.sendall(size_bytes)
 
