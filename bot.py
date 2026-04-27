@@ -3,6 +3,8 @@ import struct
 import socket
 
 BOT_PORT = 8888
+SERVER_HOST = "localhost"
+SERVER_PORT = 3000
 
 def send_json(sock, message):
     json_string = json.dumps(message)
@@ -62,3 +64,21 @@ def start_bot_server():
         handle_message(client_socket)
 
         client_socket.close()
+def subscribe_to_server():
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    client_socket.connect((SERVER_HOST, SERVER_PORT))
+
+    subscribe_message = {
+        "request": "subscribe",
+        "port": BOT_PORT,
+        "name": "BERTHOFUSEE",
+        "matricules": ["24371"]
+    }
+
+    send_json(client_socket, subscribe_message)
+
+    response = receive_json(client_socket)
+    print("Réponse du serveur :", response)
+
+    client_socket.close()
