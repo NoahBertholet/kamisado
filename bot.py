@@ -45,12 +45,26 @@ def receive_json(sock):
 def handle_message(sock):
     message = receive_json(sock)
     print("Message recu", message)
-    if message["request"]=="ping":
-        print("réponse envoyée: pong")
-        send_json(sock,{"response":"pong"})
-    elif message["request"]=="play":
-        send_json(sock,{"response" :"giveup"})
 
+    if message is None:
+        return
+
+    if message["request"] == "ping":
+        print("réponse envoyée: pong")
+        send_json(sock, {"response": "pong"})
+
+    elif message["request"] == "play":
+        move = choose_move(message["state"])
+
+        if move is None:
+            send_json(sock, {"response": "giveup"})
+        else:
+            send_json(sock, {
+                "response": "move",
+                "move": move,
+                "message": "Premier coup automatique"
+            })
+        
 def start_bot_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
