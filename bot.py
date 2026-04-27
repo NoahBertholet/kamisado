@@ -78,8 +78,54 @@ def receive_json(sock):
     return message
 
 def choose_move(state):
-    print("STATE =",state)
-  
+    players = state["players"]
+    my_name = "BERTHOFUSEE"
+
+    my_index = players.index(my_name)
+
+    if my_index == 0:
+        my_kind = "dark"
+    else:
+        my_kind = "light"
+
+    print("Je joue les", my_kind)
+    board = state["board"]
+    required_color = state["color"]
+
+    for r in range(8):
+        for c in range(8):
+            piece = board[r][c][1]
+
+            if piece is None:
+                continue
+
+            piece_color, piece_kind = piece
+
+            if piece_kind != my_kind:
+                continue
+
+            if required_color is not None and piece_color != required_color:
+                continue
+
+            print("Pièce jouable :", r, c)
+    moves=[]
+    if my_kind == "dark":
+        directions = [(-1, 0), (-1, -1), (-1, 1)]
+    else:
+        directions = [(1, 0), (1, -1), (1, 1)]
+    for dr, dc in directions:
+        new_r = r + dr
+        new_c = c + dc
+
+    while 0 <= new_r < 8 and 0 <= new_c < 8:
+
+        if board[new_r][new_c][1] is not None:
+            break
+
+        moves.append([[r, c], [new_r, new_c]])
+
+        new_r += dr
+        new_c += dc
 def handle_message(sock):
     message = receive_json(sock)
     print("Message recu", message)
