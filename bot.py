@@ -2,11 +2,43 @@ import json
 import struct
 import socket
 import threading
+import random
 
 BOT_PORT = 8888
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
-
+funnylines = [
+    "Je réfléchis très fort...",
+    "Coup calculé à 200 IQ",
+    "Ça passe ou ça casse !",
+    "Je n'ai aucune idée de ce que je fais",
+    "Stratégie secrète activée",
+    "Tout est sous contrôle (je crois)",
+    "On tente quelque chose...",
+    "Pourquoi pas ce coup ?",
+    "C'est sûrement une bonne idée",
+    "Ça a l'air intelligent",
+    "Je joue au hasard mais avec style",
+    "Un coup digne d'un maître... ou pas",
+    "Faisons semblant que c'est stratégique",
+    "Je bluffe complètement",
+    "Coup improvisé",
+    "On verra bien ce que ça donne",
+    "La chance est avec moi",
+    "Plan génial en cours",
+    "Ça va passer... peut-être",
+    "Je sens que ça va marcher",
+    "Coup audacieux",
+    "C'est le moment de briller",
+    "Analyse terminée (plus ou moins)",
+    "Je tente un truc",
+    "Espérons que ça fonctionne",
+    "On croise les doigts",
+    "Coup inspiré",
+    "Je joue avec confiance",
+    "Aucune pression",
+    "Tout est calculé... ou presque"
+]
 def send_json(sock, message):
     json_string = json.dumps(message)
     json_bytes = json_string.encode("utf-8")
@@ -17,7 +49,6 @@ def send_json(sock, message):
 
     sock.sendall(size_bytes)
     sock.sendall(json_bytes)
-
 
 def receive_json(sock):
     
@@ -42,6 +73,9 @@ def receive_json(sock):
     message = json.loads(json_string)
 
     return message
+
+def choose_move(state):
+    
 def handle_message(sock):
     message = receive_json(sock)
     print("Message recu", message)
@@ -62,7 +96,7 @@ def handle_message(sock):
             send_json(sock, {
                 "response": "move",
                 "move": move,
-                "message": "Premier coup automatique"
+                "message ": random.choice(funnylines)
             })
         
 def start_bot_server():
