@@ -108,7 +108,7 @@ def choose_move(state):
                 continue
 
             print("Pièce jouable :", r, c)
-    moves=[]
+        moves=[]
     if my_kind == "dark":
         directions = [(-1, 0), (-1, -1), (-1, 1)]
     else:
