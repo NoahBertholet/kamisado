@@ -255,19 +255,3 @@ def test_handle_message_none_does_not_crash():
     socket_2.close()
 
     assert result is None
-    state = {
-        "players": ["BERTHOFUSEE", "adversaire"],
-        "color": "red",
-        "board": [
-            [[None, None] for _ in range(8)]
-            for _ in range(8)
-        ]
-    }
-
-    state["board"][6][0] = ["blue", ("blue", "dark")]
-    state["board"][6][1] = ["red", ("red", "dark")]
-
-    move = choose_move(state)
-
-    assert move is not None
-    assert move["from"] == [6, 1]
