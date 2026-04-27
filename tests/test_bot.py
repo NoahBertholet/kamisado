@@ -55,3 +55,30 @@ def test_build_subscribe_message():
     assert message["port"] == BOT_PORT
     assert message["name"] == "BERTHOFUSEE"
     assert message["matricules"] == ["24371", "23032"]
+
+def test_receive_json_no_data():
+    socket_1, socket_2 = socket.socketpair()
+
+    socket_1.close()
+
+    result = receive_json(socket_2)
+
+    socket_2.close()
+
+    assert result is None
+    
+def test_receive_json_incomplete_data():
+    socket_1, socket_2 = socket.socketpair()
+
+    # envoyer seulement la taille (par exemple 10 octets attendus)
+    size_bytes = struct.pack("I", 10)
+    socket_1.sendall(size_bytes)
+
+    # fermer avant d'envoyer le JSON
+    socket_1.close()
+
+    result = receive_json(socket_2)
+
+    socket_2.close()
+
+    assert result is None
