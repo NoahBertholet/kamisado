@@ -9,7 +9,7 @@ import copy
 #constantes
 BOT_PORT = 8888
 BOT_NAME = "BERTHOFUSEE"
-SERVER_HOST = "192.168.1.220"
+SERVER_HOST = "localhost"
 SERVER_PORT = 3000
 funnylines = [
     "Je réfléchis très fort...",
@@ -80,9 +80,11 @@ def receive_json(sock):
     return message
 
 def get_my_kind(state):
-
     players = state["players"]
     my_index = players.index(BOT_NAME)
+
+    if state["current"] != my_index:
+        return None
 
     if my_index == 0:
         return "dark"
@@ -190,6 +192,9 @@ def score_opponent_danger(opponent_moves, opponent_kind):
 def choose_move(state):
     my_kind = get_my_kind(state)
 
+    if my_kind is None:
+        return None
+
     opponent_kind = "light" if my_kind == "dark" else "dark"
 
     moves = get_possible_moves(state, my_kind)
@@ -204,9 +209,7 @@ def choose_move(state):
         score = score_move(move, my_kind)
 
         future_state = apply_move_to_copy(state, move)
-
         opponent_moves = get_possible_moves(future_state, opponent_kind)
-
         danger = score_opponent_danger(opponent_moves, opponent_kind)
 
         score -= danger
@@ -217,7 +220,7 @@ def choose_move(state):
         elif score == best_score:
             best_moves.append(move)
 
-    return random.choice(best_moves)
+    return best_moves[0]
 
 def handle_message(sock):
     message = receive_json(sock)
@@ -240,7 +243,7 @@ def handle_message(sock):
             send_json(sock, {
                 "response": "move",
                 "move": move,
-                "message ": random.choice(funnylines)
+                "message": random.choice(funnylines)
             })
         
 def start_bot_server():
