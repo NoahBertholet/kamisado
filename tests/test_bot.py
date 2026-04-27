@@ -47,3 +47,4 @@ def test_handle_message_giveup():
     socket_2.close()
 
     assert response == {"response": "giveup"}
+    

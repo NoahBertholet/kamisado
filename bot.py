@@ -66,6 +66,15 @@ def start_bot_server():
         handle_message(client_socket)
 
         client_socket.close()
+
+def build_subscribe_message():
+    return {
+        "request": "subscribe",
+        "port": BOT_PORT,
+        "name": "BERTHOFUSEE",
+        "matricules": ["24371", "23032"]
+    }
+
 def subscribe_to_server():
     print("Connexion au serveur...")
 
@@ -74,12 +83,7 @@ def subscribe_to_server():
 
     print("Connexion établie")
 
-    subscribe_message = {
-        "request": "subscribe",
-        "port": BOT_PORT,
-        "name": "BERTHOFUSEE",
-        "matricules": ["24371 , 23032"]
-    }
+    subscribe_message = build_subscribe_message()
 
     print("Envoi du message subscribe...")
     send_json(client_socket, subscribe_message)
