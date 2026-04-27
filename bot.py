@@ -9,7 +9,7 @@ import copy
 #constantes
 BOT_PORT = 8888
 BOT_NAME = "BERTHOFUSEE"
-SERVER_HOST = "localhost"
+SERVER_HOST = "192.168.1.220"
 SERVER_PORT = 3000
 funnylines = [
     "Je réfléchis très fort...",
