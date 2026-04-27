@@ -4,6 +4,7 @@ import struct
 import socket
 import threading
 import random
+import copy
 
 #constantes
 BOT_PORT = 8888
@@ -78,25 +79,23 @@ def receive_json(sock):
 
     return message
 
-def choose_move(state):
-    players = state["players"]
-    my_name = BOT_NAME
+def get_my_kind(state):
 
-    my_index = players.index(my_name)
+    players = state["players"]
+    my_index = players.index(BOT_NAME)
 
     if my_index == 0:
-        my_kind = "dark"
+        return "dark"
     else:
-        my_kind = "light"
+        return "light"
 
-    print("Je joue les", my_kind)
-
+def get_possible_moves(state, kind):
     board = state["board"]
     required_color = state["color"]
 
     moves = []
 
-    if my_kind == "dark":
+    if kind == "dark":
         directions = [(-1, 0), (-1, -1), (-1, 1)]
     else:
         directions = [(1, 0), (1, -1), (1, 1)]
@@ -110,13 +109,11 @@ def choose_move(state):
 
             piece_color, piece_kind = piece
 
-            if piece_kind != my_kind:
+            if piece_kind != kind:
                 continue
 
             if required_color is not None and piece_color != required_color:
                 continue
-
-            print("Pièce jouable :", r, c)
 
             for dr, dc in directions:
                 new_r = r + dr
@@ -131,10 +128,105 @@ def choose_move(state):
                     new_r += dr
                     new_c += dc
 
+    return moves
+
+def apply_move_to_copy(state, move):
+    new_state = copy.deepcopy(state)
+    board = new_state["board"]
+
+    start, end = move
+    start_r, start_c = start
+    end_r, end_c = end
+
+    piece = board[start_r][start_c][1]
+
+    board[start_r][start_c][1] = None
+    board[end_r][end_c][1] = piece
+
+    # important pour Kamisado
+    new_state["color"] = board[end_r][end_c][0]
+
+    return new_state
+
+def score_move(move, my_kind):
+    start, end = move
+    end_r, end_c = end
+
+    score = 0
+
+    # 🎯 gagner directement
+    if my_kind == "dark" and end_r == 0:
+        score += 10000
+    if my_kind == "light" and end_r == 7:
+        score += 10000
+
+    # 📈 avancer vers la victoire
+    if my_kind == "dark":
+        score += (7 - end_r) * 10
+    else:
+        score += end_r * 10
+
+    # 🎯 se rapprocher du centre
+    distance_from_center = abs(end_c - 3.5)
+    score += (3.5 - distance_from_center) * 5
+
+    return score
+
+def score_opponent_danger(opponent_moves, opponent_kind):
+    danger = 0
+
+    for move in opponent_moves:
+        start, end = move
+        end_r, end_c = end
+
+        # 💀 si l’adversaire peut gagner
+        if opponent_kind == "dark" and end_r == 0:
+            danger += 10000
+        if opponent_kind == "light" and end_r == 7:
+            danger += 10000
+
+        # 📈 progression adverse
+        if opponent_kind == "dark":
+            danger += (7 - end_r) * 3
+        else:
+            danger += end_r * 3
+
+    return danger
+
+def choose_move(state):
+    my_kind = get_my_kind(state)
+
+    opponent_kind = "light" if my_kind == "dark" else "dark"
+
+    moves = get_possible_moves(state, my_kind)
+
     if not moves:
         return None
 
-    return random.choice(moves)
+    best_score = None
+    best_moves = []
+
+    for move in moves:
+        # 🧠 score de base
+        score = score_move(move, my_kind)
+
+        # 🔮 simulation
+        future_state = apply_move_to_copy(state, move)
+
+        opponent_moves = get_possible_moves(future_state, opponent_kind)
+
+        danger = score_opponent_danger(opponent_moves, opponent_kind)
+
+        # ⚖️ équilibre attaque / défense
+        score -= danger
+
+        if best_score is None or score > best_score:
+            best_score = score
+            best_moves = [move]
+        elif score == best_score:
+            best_moves.append(move)
+
+    return random.choice(best_moves)
 
 def handle_message(sock):
     message = receive_json(sock)
