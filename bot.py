@@ -1,6 +1,7 @@
 import json
 import struct
 import socket
+import threading
 
 BOT_PORT = 8888
 SERVER_HOST = "localhost"
@@ -12,7 +13,7 @@ def send_json(sock, message):
 
     message_size = len(json_bytes)
 
-    size_bytes = struct.pack("!I", message_size)
+    size_bytes = struct.pack("I", message_size)
 
     sock.sendall(size_bytes)
     sock.sendall(json_bytes)
@@ -25,7 +26,7 @@ def receive_json(sock):
     if not size_bytes:
         return None
 
-    message_size = struct.unpack("!I", size_bytes)[0]
+    message_size = struct.unpack("I", size_bytes)[0]
 
     json_bytes = b""
 
@@ -65,20 +66,35 @@ def start_bot_server():
 
         client_socket.close()
 def subscribe_to_server():
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    print("Connexion au serveur...")
 
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((SERVER_HOST, SERVER_PORT))
+
+    print("Connexion établie")
 
     subscribe_message = {
         "request": "subscribe",
         "port": BOT_PORT,
         "name": "BERTHOFUSEE",
-        "matricules": ["24371"]
+        "matricules": ["24371 , 23032"]
     }
 
+    print("Envoi du message subscribe...")
     send_json(client_socket, subscribe_message)
 
+    print("Attente de la réponse du serveur...")
     response = receive_json(client_socket)
+
     print("Réponse du serveur :", response)
 
     client_socket.close()
+    print("Connexion fermée")
+
+if __name__ == "__main__":
+    bot_thread = threading.Thread(target=start_bot_server, daemon=True)
+    bot_thread.start()
+
+    subscribe_to_server()
+
+    bot_thread.join()
