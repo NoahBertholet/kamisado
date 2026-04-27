@@ -143,7 +143,6 @@ def apply_move_to_copy(state, move):
     board[start_r][start_c][1] = None
     board[end_r][end_c][1] = piece
 
-    # important pour Kamisado
     new_state["color"] = board[end_r][end_c][0]
 
     return new_state
@@ -154,19 +153,16 @@ def score_move(move, my_kind):
 
     score = 0
 
-    # 🎯 gagner directement
     if my_kind == "dark" and end_r == 0:
         score += 10000
     if my_kind == "light" and end_r == 7:
         score += 10000
 
-    # 📈 avancer vers la victoire
     if my_kind == "dark":
         score += (7 - end_r) * 10
     else:
         score += end_r * 10
 
-    # 🎯 se rapprocher du centre
     distance_from_center = abs(end_c - 3.5)
     score += (3.5 - distance_from_center) * 5
 
@@ -179,13 +175,11 @@ def score_opponent_danger(opponent_moves, opponent_kind):
         start, end = move
         end_r, end_c = end
 
-        # 💀 si l’adversaire peut gagner
         if opponent_kind == "dark" and end_r == 0:
             danger += 10000
         if opponent_kind == "light" and end_r == 7:
             danger += 10000
 
-        # 📈 progression adverse
         if opponent_kind == "dark":
             danger += (7 - end_r) * 3
         else:
@@ -207,17 +201,14 @@ def choose_move(state):
     best_moves = []
 
     for move in moves:
-        # 🧠 score de base
         score = score_move(move, my_kind)
 
-        # 🔮 simulation
         future_state = apply_move_to_copy(state, move)
 
         opponent_moves = get_possible_moves(future_state, opponent_kind)
 
         danger = score_opponent_danger(opponent_moves, opponent_kind)
 
-        # ⚖️ équilibre attaque / défense
         score -= danger
 
         if best_score is None or score > best_score:
