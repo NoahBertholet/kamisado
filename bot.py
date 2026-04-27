@@ -46,6 +46,7 @@ def handle_message(sock):
     message = receive_json(sock)
     print("Message recu", message)
     if message["request"]=="ping":
+        print("réponse envoyée: pong")
         send_json(sock,{"response":"pong"})
     elif message["request"]=="play":
         send_json(sock,{"response" :"giveup"})
