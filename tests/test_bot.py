@@ -3,7 +3,7 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from bot import send_json, receive_json, handle_message
+from bot import send_json, receive_json, handle_message, build_subscribe_message, BOT_PORT
 
 
 def test_send_and_receive_json():
@@ -48,3 +48,10 @@ def test_handle_message_giveup():
 
     assert response == {"response": "giveup"}
     
+def test_build_subscribe_message():
+    message = build_subscribe_message()
+
+    assert message["request"] == "subscribe"
+    assert message["port"] == BOT_PORT
+    assert message["name"] == "BERTHOFUSEE"
+    assert message["matricules"] == ["24371", "23032"]
