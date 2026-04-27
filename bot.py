@@ -89,8 +89,16 @@ def choose_move(state):
         my_kind = "light"
 
     print("Je joue les", my_kind)
+
     board = state["board"]
     required_color = state["color"]
+
+    moves = []
+
+    if my_kind == "dark":
+        directions = [(-1, 0), (-1, -1), (-1, 1)]
+    else:
+        directions = [(1, 0), (1, -1), (1, 1)]
 
     for r in range(8):
         for c in range(8):
@@ -108,28 +116,23 @@ def choose_move(state):
                 continue
 
             print("Pièce jouable :", r, c)
-        moves=[]
-    if my_kind == "dark":
-        directions = [(-1, 0), (-1, -1), (-1, 1)]
-    else:
-        directions = [(1, 0), (1, -1), (1, 1)]
-    for dr, dc in directions:
-        new_r = r + dr
-        new_c = c + dc
 
-    while 0 <= new_r < 8 and 0 <= new_c < 8:
+            for dr, dc in directions:
+                new_r = r + dr
+                new_c = c + dc
 
-        if board[new_r][new_c][1] is not None:
-            break
+                while 0 <= new_r < 8 and 0 <= new_c < 8:
+                    if board[new_r][new_c][1] is not None:
+                        break
 
-        moves.append([[r, c], [new_r, new_c]])
+                    moves.append([[r, c], [new_r, new_c]])
 
-        new_r += dr
-        new_c += dc
-
+                    new_r += dr
+                    new_c += dc
 
     if not moves:
         return None
+
     return random.choice(moves)
 
 def handle_message(sock):

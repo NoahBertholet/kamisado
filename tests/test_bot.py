@@ -19,14 +19,12 @@ from bot import (
 def empty_board():
     return [[[None, None] for _ in range(8)] for _ in range(8)]
 
-
 def make_state(players=None, color=None, board=None):
     return {
         "players": players or ["BERTHOFUSEE", "adversaire"],
         "color": color,
         "board": board or empty_board()
     }
-
 
 def test_send_and_receive_json():
     socket_1, socket_2 = socket.socketpair()
@@ -41,7 +39,6 @@ def test_send_and_receive_json():
 
     assert received == message
 
-
 def test_receive_json_no_data():
     socket_1, socket_2 = socket.socketpair()
 
@@ -52,7 +49,6 @@ def test_receive_json_no_data():
     socket_2.close()
 
     assert result is None
-
 
 def test_receive_json_incomplete_data():
     socket_1, socket_2 = socket.socketpair()
@@ -68,7 +64,6 @@ def test_receive_json_incomplete_data():
 
     assert result is None
 
-
 def test_build_subscribe_message():
     message = build_subscribe_message()
 
@@ -76,7 +71,6 @@ def test_build_subscribe_message():
     assert message["port"] == BOT_PORT
     assert message["name"] == "BERTHOFUSEE"
     assert message["matricules"] == ["24371", "23032"]
-
 
 def test_handle_message_ping():
     socket_1, socket_2 = socket.socketpair()
@@ -90,7 +84,6 @@ def test_handle_message_ping():
     socket_2.close()
 
     assert response == {"response": "pong"}
-
 
 def test_handle_message_play_giveup_when_no_move():
     socket_1, socket_2 = socket.socketpair()
@@ -112,14 +105,12 @@ def test_handle_message_play_giveup_when_no_move():
 
     assert response == {"response": "giveup"}
 
-
 def test_choose_move_returns_none_when_no_piece_can_move():
     state = make_state(color="blue")
 
     move = choose_move(state)
 
     assert move is None
-
 
 def test_choose_move_dark_player_returns_a_move():
     board = empty_board()
@@ -152,7 +143,6 @@ def test_choose_move_light_player_returns_a_move():
     assert move is not None
     assert move[0] == [0, 0]
 
-
 def test_choose_move_respects_required_color():
     board = empty_board()
     board[7][0][1] = ("blue", "dark")
@@ -168,7 +158,6 @@ def test_choose_move_respects_required_color():
 
     assert move is not None
     assert move[0] == [7, 7]
-
 
 def test_choose_move_ignores_wrong_color():
     board = empty_board()
@@ -199,7 +188,6 @@ def test_choose_move_ignores_opponent_piece():
 
     assert move is None
 
-
 def test_choose_move_does_not_go_outside_board():
     board = empty_board()
     board[7][7][1] = ("blue", "dark")
@@ -216,7 +204,6 @@ def test_choose_move_does_not_go_outside_board():
     assert 0 <= end[0] < 8
     assert 0 <= end[1] < 8
 
-
 def test_choose_move_does_not_move_on_occupied_square():
     board = empty_board()
     board[7][7][1] = ("blue", "dark")
@@ -228,7 +215,6 @@ def test_choose_move_does_not_move_on_occupied_square():
 
     assert move is not None
     assert move[1] != [6, 7]
-
 
 def test_choose_move_returns_none_when_piece_is_blocked():
     board = empty_board()
@@ -242,7 +228,6 @@ def test_choose_move_returns_none_when_piece_is_blocked():
 
     assert move is None
 
-
 def test_choose_move_without_required_color_can_play_any_own_piece():
     board = empty_board()
     board[7][7][1] = ("blue", "dark")
@@ -254,13 +239,11 @@ def test_choose_move_without_required_color_can_play_any_own_piece():
     assert move is not None
     assert move[0] == [7, 7]
 
-
 def test_choose_move_raises_error_if_bot_name_not_in_players():
     state = make_state(players=["joueur1", "joueur2"])
 
     with pytest.raises(ValueError):
         choose_move(state)
-
 
 def test_handle_message_none_does_not_crash():
     socket_1, socket_2 = socket.socketpair()
