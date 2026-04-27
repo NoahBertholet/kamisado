@@ -7,6 +7,7 @@ import random
 
 #constantes
 BOT_PORT = 8888
+BOT_NAME = "BERTHOFUSEE"
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
 funnylines = [
@@ -79,7 +80,7 @@ def receive_json(sock):
 
 def choose_move(state):
     players = state["players"]
-    my_name = "BERTHOFUSEE"
+    my_name = BOT_NAME
 
     my_index = players.index(my_name)
 
@@ -179,7 +180,7 @@ def build_subscribe_message():
     return {
         "request": "subscribe",
         "port": BOT_PORT,
-        "name": "BERTHOFUSEE",
+        "name": BOT_NAME,
         "matricules": ["24371", "23032"]
     }
 
@@ -205,7 +206,7 @@ def subscribe_to_server():
     print("Connexion fermée")
 
 if __name__ == "__main__":
-    bot_thread = threading.Thread(target=start_bot_server, daemon=True)
+    bot_thread = threading.Thread(target=start_bot_server)
     bot_thread.start()
 
     subscribe_to_server()

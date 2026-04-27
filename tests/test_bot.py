@@ -127,7 +127,6 @@ def test_choose_move_dark_player_returns_a_move():
     assert move is not None
     assert move[0] == [7, 7]
 
-
 def test_choose_move_light_player_returns_a_move():
     board = empty_board()
     board[0][0][1] = ("red", "light")
@@ -172,7 +171,6 @@ def test_choose_move_ignores_wrong_color():
     move = choose_move(state)
 
     assert move is None
-
 
 def test_choose_move_ignores_opponent_piece():
     board = empty_board()
