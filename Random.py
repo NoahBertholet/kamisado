@@ -9,14 +9,8 @@ import sys
 # constantes
 BOT_PORT = 8889
 BOT_NAME = "RANDOM_BOT"
-
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
-
-
-# ======================
-# COMMUNICATION
-# ======================
 
 def send_json(sock, message):
     json_string = json.dumps(message)
@@ -27,7 +21,6 @@ def send_json(sock, message):
 
     sock.sendall(size_bytes)
     sock.sendall(json_bytes)
-
 
 def receive_json(sock):
     size_bytes = sock.recv(4)
@@ -49,11 +42,6 @@ def receive_json(sock):
 
     json_string = json_bytes.decode("utf-8")
     return json.loads(json_string)
-
-
-# ======================
-# LOGIQUE RANDOM
-# ======================
 
 def choose_move(state):
     players = state["players"]
@@ -107,11 +95,6 @@ def choose_move(state):
 
     return random.choice(moves)
 
-
-# ======================
-# GESTION DES MESSAGES
-# ======================
-
 def handle_message(sock):
     message = receive_json(sock)
 
@@ -132,11 +115,6 @@ def handle_message(sock):
                 "move": move
             })
 
-
-# ======================
-# SERVEUR BOT
-# ======================
-
 def start_bot_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -150,11 +128,6 @@ def start_bot_server():
         handle_message(client_socket)
         client_socket.close()
 
-
-# ======================
-# SUBSCRIBE
-# ======================
-
 def build_subscribe_message():
     return {
         "request": "subscribe",
@@ -162,7 +135,6 @@ def build_subscribe_message():
         "name": BOT_NAME,
         "matricules": ["66178", "17866"]
     }
-
 
 def subscribe_to_server():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -174,11 +146,6 @@ def subscribe_to_server():
     print("Réponse serveur :", response)
 
     client_socket.close()
-
-
-# ======================
-# MAIN
-# ======================
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=start_bot_server)
