@@ -92,6 +92,9 @@ def get_my_kind(state):
         return "light"
 
 def get_possible_moves(state, kind):
+    if kind is None:
+        return []
+
     board = state["board"]
     required_color = state["color"]
 
@@ -99,8 +102,10 @@ def get_possible_moves(state, kind):
 
     if kind == "dark":
         directions = [(-1, 0), (-1, -1), (-1, 1)]
-    else:
+    elif kind == "light":
         directions = [(1, 0), (1, -1), (1, 1)]
+    else:
+        return []
 
     for r in range(8):
         for c in range(8):
@@ -171,23 +176,18 @@ def score_move(move, my_kind):
     return score
 
 def score_opponent_danger(opponent_moves, opponent_kind):
-    danger = 0
+    if not opponent_moves:
+        return 0
+
+    best_danger = 0
 
     for move in opponent_moves:
-        start, end = move
-        end_r, end_c = end
+        danger = score_move(move, opponent_kind)
 
-        if opponent_kind == "dark" and end_r == 0:
-            danger += 10000
-        if opponent_kind == "light" and end_r == 7:
-            danger += 10000
+        if danger > best_danger:
+            best_danger = danger
 
-        if opponent_kind == "dark":
-            danger += (7 - end_r) * 3
-        else:
-            danger += end_r * 3
-
-    return danger
+    return best_danger
 
 def choose_move(state):
     my_kind = get_my_kind(state)
@@ -202,6 +202,16 @@ def choose_move(state):
     if not moves:
         return None
 
+    # 1. Si je peux gagner directement, je gagne
+    for move in moves:
+        end_r = move[1][0]
+
+        if my_kind == "dark" and end_r == 0:
+            return move
+
+        if my_kind == "light" and end_r == 7:
+            return move
+
     best_score = None
     best_moves = []
 
@@ -209,9 +219,26 @@ def choose_move(state):
         score = score_move(move, my_kind)
 
         future_state = apply_move_to_copy(state, move)
-        opponent_moves = get_possible_moves(future_state, opponent_kind)
-        danger = score_opponent_danger(opponent_moves, opponent_kind)
 
+        opponent_moves = get_possible_moves(future_state, opponent_kind)
+
+        # 2. Si ce coup permet à l'adversaire de gagner directement, grosse pénalité
+        opponent_can_win = False
+
+        for opponent_move in opponent_moves:
+            opponent_end_r = opponent_move[1][0]
+
+            if opponent_kind == "dark" and opponent_end_r == 0:
+                opponent_can_win = True
+
+            if opponent_kind == "light" and opponent_end_r == 7:
+                opponent_can_win = True
+
+        if opponent_can_win:
+            score -= 100000
+
+        # 3. Sinon on enlève seulement le meilleur danger adverse
+        danger = score_opponent_danger(opponent_moves, opponent_kind)
         score -= danger
 
         if best_score is None or score > best_score:
@@ -220,7 +247,7 @@ def choose_move(state):
         elif score == best_score:
             best_moves.append(move)
 
-    return best_moves[0]
+    return random.choice(best_moves)
 
 def handle_message(sock):
     message = receive_json(sock)
