@@ -1,4 +1,4 @@
-#import
+# import
 import json
 import struct
 import socket
@@ -7,11 +7,12 @@ import random
 import copy
 import time
 
-#constantes
+# constantes
 BOT_PORT = 8888
 BOT_NAME = "BERTHOFUSEE"
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
+
 funnylines = [
     "Je réfléchis très fort...",
     "Coup calculé à 200 IQ",
@@ -45,19 +46,19 @@ funnylines = [
     "Tout est calculé... ou presque"
 ]
 
+
 def send_json(sock, message):
     json_string = json.dumps(message)
     json_bytes = json_string.encode("utf-8")
 
     message_size = len(json_bytes)
-
     size_bytes = struct.pack("I", message_size)
 
     sock.sendall(size_bytes)
     sock.sendall(json_bytes)
 
+
 def receive_json(sock):
-    
     size_bytes = sock.recv(4)
 
     if not size_bytes:
@@ -80,6 +81,7 @@ def receive_json(sock):
 
     return message
 
+
 def get_my_kind(state):
     players = state["players"]
     my_index = players.index(BOT_NAME)
@@ -91,6 +93,7 @@ def get_my_kind(state):
         return "dark"
     else:
         return "light"
+
 
 def get_possible_moves(state, kind):
     if kind is None:
@@ -138,6 +141,7 @@ def get_possible_moves(state, kind):
 
     return moves
 
+
 def apply_move_to_copy(state, move):
     new_state = copy.deepcopy(state)
     board = new_state["board"]
@@ -155,26 +159,64 @@ def apply_move_to_copy(state, move):
 
     return new_state
 
+
+def is_winning_move(move, kind):
+    end_r = move[1][0]
+
+    if kind == "dark" and end_r == 0:
+        return True
+
+    if kind == "light" and end_r == 7:
+        return True
+
+    return False
+
+
 def score_move(move, my_kind):
     start, end = move
+
+    start_r, start_c = start
     end_r, end_c = end
 
     score = 0
 
-    if my_kind == "dark" and end_r == 0:
-        score += 10000
-    if my_kind == "light" and end_r == 7:
+    # Coup gagnant
+    if is_winning_move(move, my_kind):
         score += 10000
 
+    # Avancer vers la ligne de victoire
     if my_kind == "dark":
-        score += (7 - end_r) * 10
+        avance = start_r - end_r
+        distance_victoire = end_r
     else:
-        score += end_r * 10
+        avance = end_r - start_r
+        distance_victoire = 7 - end_r
 
+    score += avance * 20
+
+    # Être proche de la ligne de victoire
+    score += (7 - distance_victoire) * 10
+
+    # Favoriser le centre du plateau
     distance_from_center = abs(end_c - 3.5)
     score += (3.5 - distance_from_center) * 5
 
+    # Petit bonus pour les grands déplacements
+    distance_move = abs(end_r - start_r) + abs(end_c - start_c)
+    score += distance_move
+
     return score
+
+
+def opponent_can_win_next_turn(state, opponent_kind):
+    opponent_moves = get_possible_moves(state, opponent_kind)
+
+    for opponent_move in opponent_moves:
+        if is_winning_move(opponent_move, opponent_kind):
+            return True
+
+    return False
+
 
 def score_opponent_danger(opponent_moves, opponent_kind):
     if not opponent_moves:
@@ -183,12 +225,30 @@ def score_opponent_danger(opponent_moves, opponent_kind):
     best_danger = 0
 
     for move in opponent_moves:
-        danger = score_move(move, opponent_kind)
+        danger = 0
+
+        # Danger maximal si l'adversaire peut gagner
+        if is_winning_move(move, opponent_kind):
+            danger += 10000
+
+        end_r = move[1][0]
+        end_c = move[1][1]
+
+        # Plus l'adversaire est proche de sa victoire, plus c'est dangereux
+        if opponent_kind == "dark":
+            danger += (7 - end_r) * 10
+        else:
+            danger += end_r * 10
+
+        # Un pion adverse au centre est souvent plus dangereux
+        distance_from_center = abs(end_c - 3.5)
+        danger += (3.5 - distance_from_center) * 3
 
         if danger > best_danger:
             best_danger = danger
 
     return best_danger
+
 
 def choose_move(state):
     start_time = time.time()
@@ -206,64 +266,65 @@ def choose_move(state):
     if not moves:
         return None
 
+    # 1. Jouer directement un coup gagnant
+    winning_moves = []
+
+    for move in moves:
+        if is_winning_move(move, my_kind):
+            winning_moves.append(move)
+
+    if winning_moves:
+        return random.choice(winning_moves)
+
+    # 2. Éviter les coups qui donnent une victoire directe à l'adversaire
+    safe_moves = []
+    studied_moves = []
+
+    for move in moves:
+        if time.time() - start_time >= time_limit:
+            if safe_moves:
+                return random.choice(safe_moves)
+            if studied_moves:
+                return random.choice(studied_moves)
+            return random.choice(moves)
+
+        future_state = apply_move_to_copy(state, move)
+
+        if not opponent_can_win_next_turn(future_state, opponent_kind):
+            safe_moves.append(move)
+
+        studied_moves.append(move)
+
+    if safe_moves:
+        moves = safe_moves
+
+    # 3. Trier les coups restants selon des règles simples
     best_score = None
     best_moves = []
-    studied_moves = []
 
     for move in moves:
         if time.time() - start_time >= time_limit:
             if best_moves:
                 return random.choice(best_moves)
-            if studied_moves:
-                return random.choice(studied_moves)
             return random.choice(moves)
-
-        end_r = move[1][0]
-
-        if my_kind == "dark" and end_r == 0:
-            return move
-
-        if my_kind == "light" and end_r == 7:
-            return move
 
         score = score_move(move, my_kind)
 
         future_state = apply_move_to_copy(state, move)
         opponent_moves = get_possible_moves(future_state, opponent_kind)
 
-        opponent_can_win = False
-
-        for opponent_move in opponent_moves:
-            if time.time() - start_time >= time_limit:
-                if best_moves:
-                    return random.choice(best_moves)
-                if studied_moves:
-                    return random.choice(studied_moves)
-                return random.choice(moves)
-
-            opponent_end_r = opponent_move[1][0]
-
-            if opponent_kind == "dark" and opponent_end_r == 0:
-                opponent_can_win = True
-
-            if opponent_kind == "light" and opponent_end_r == 7:
-                opponent_can_win = True
-
-        if opponent_can_win:
-            score -= 100000
-
         danger = score_opponent_danger(opponent_moves, opponent_kind)
         score -= danger
-
-        studied_moves.append(move)
 
         if best_score is None or score > best_score:
             best_score = score
             best_moves = [move]
+
         elif score == best_score:
             best_moves.append(move)
 
     return random.choice(best_moves)
+
 
 def handle_message(sock):
     message = receive_json(sock)
@@ -288,7 +349,8 @@ def handle_message(sock):
                 "move": move,
                 "message": random.choice(funnylines)
             })
-        
+
+
 def start_bot_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -305,6 +367,7 @@ def start_bot_server():
 
         client_socket.close()
 
+
 def build_subscribe_message():
     return {
         "request": "subscribe",
@@ -312,6 +375,7 @@ def build_subscribe_message():
         "name": BOT_NAME,
         "matricules": ["24371", "23032"]
     }
+
 
 def subscribe_to_server():
     print("Connexion au serveur...")
@@ -333,6 +397,7 @@ def subscribe_to_server():
 
     client_socket.close()
     print("Connexion fermée")
+
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=start_bot_server)
