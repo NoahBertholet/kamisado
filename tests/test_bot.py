@@ -384,6 +384,9 @@ def test_opponent_can_win_next_turn_true():
 def test_opponent_can_win_next_turn_false():
     board = empty_board()
     board[7][3][1] = ("blue", "dark")
+    board[6][3][1] = ("red", "light")
+    board[6][2][1] = ("red", "light")
+    board[6][4][1] = ("red", "light")
 
     state = make_state(color="blue", board=board)
 
