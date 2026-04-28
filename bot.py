@@ -5,6 +5,7 @@ import socket
 import threading
 import random
 import copy
+import time
 
 #constantes
 BOT_PORT = 8888
@@ -190,6 +191,9 @@ def score_opponent_danger(opponent_moves, opponent_kind):
     return best_danger
 
 def choose_move(state):
+    start_time = time.time()
+    time_limit = 2.8
+
     my_kind = get_my_kind(state)
 
     if my_kind is None:
@@ -202,8 +206,20 @@ def choose_move(state):
     if not moves:
         return None
 
-    # 1. Si je peux gagner directement, je gagne
+    best_score = None
+    best_moves = []
+    studied_moves = []
+
     for move in moves:
+        if time.time() - start_time >= time_limit:
+            if best_moves:
+                return random.choice(best_moves)
+            if studied_moves:
+                return random.choice(studied_moves)
+            return random.choice(moves)
+
+        studied_moves.append(move)
+
         end_r = move[1][0]
 
         if my_kind == "dark" and end_r == 0:
@@ -212,20 +228,19 @@ def choose_move(state):
         if my_kind == "light" and end_r == 7:
             return move
 
-    best_score = None
-    best_moves = []
-
-    for move in moves:
         score = score_move(move, my_kind)
 
         future_state = apply_move_to_copy(state, move)
-
         opponent_moves = get_possible_moves(future_state, opponent_kind)
 
-        # 2. Si ce coup permet à l'adversaire de gagner directement, grosse pénalité
         opponent_can_win = False
 
         for opponent_move in opponent_moves:
+            if time.time() - start_time >= time_limit:
+                if best_moves:
+                    return random.choice(best_moves)
+                return random.choice(studied_moves)
+
             opponent_end_r = opponent_move[1][0]
 
             if opponent_kind == "dark" and opponent_end_r == 0:
@@ -237,7 +252,6 @@ def choose_move(state):
         if opponent_can_win:
             score -= 100000
 
-        # 3. Sinon on enlève seulement le meilleur danger adverse
         danger = score_opponent_danger(opponent_moves, opponent_kind)
         score -= danger
 
