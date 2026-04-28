@@ -36,16 +36,9 @@ Notre projet utilise plusieurs bibliothèques Python essentielles :
 - `struct` : gestion de la taille des données envoyées  
 - `threading` : gestion des tâches en parallèle  
 - `random` : sélection aléatoire de coups  
+- `time` : gestion du temps afin de ne pas dépaser les 3 secondes
 
 ---
-
-## ⏱️ Gestion du temps (`time`)
-
-Le module `time` est utilisé pour contrôler le temps de réflexion de notre IA.
-
-Dans un environnement compétitif, le bot dispose d’un temps limité pour jouer. Nous utilisons donc :
-
-- `time.time()` : retourne le temps actuel en secondes  
 
 ### Fonctionnement :
 
