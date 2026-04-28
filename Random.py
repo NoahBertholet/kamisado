@@ -7,8 +7,8 @@ import random
 import sys
 
 # constantes
-BOT_PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8888
-BOT_NAME = sys.argv[2] if len(sys.argv) > 2 else "RANDOM_BOT"
+BOT_PORT = 8889
+BOT_NAME = "RANDOM_BOT"
 
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
