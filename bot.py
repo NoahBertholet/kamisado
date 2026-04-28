@@ -184,13 +184,17 @@ def score_move(move, my_kind):
         avance = end_r - start_r
         distance_victoire = 7 - end_r
 
-    score += avance * 20
+    # Moins agressif qu'avant : on avance, mais pas à tout prix
+    score += avance * 12
 
-    score += (7 - distance_victoire) * 10
+    # Bonus si le pion se rapproche de la ligne de victoire
+    score += (7 - distance_victoire) * 7
 
+    # Favoriser légèrement le centre
     distance_from_center = abs(end_c - 3.5)
     score += (3.5 - distance_from_center) * 5
 
+    # Petit bonus pour les déplacements longs
     distance_move = abs(end_r - start_r) + abs(end_c - start_c)
     score += distance_move
 
@@ -237,18 +241,27 @@ def choose_move(state):
     start_time = time.time()
     time_limit = 2.8
 
+    print("\n===== NOUVEAU TOUR =====")
+
     my_kind = get_my_kind(state)
 
     if my_kind is None:
         return None
 
+    print("Je suis :", my_kind)
+    print("Couleur imposée :", state["color"])
+
     opponent_kind = "light" if my_kind == "dark" else "dark"
 
     moves = get_possible_moves(state, my_kind)
 
+    print("Nombre de coups possibles :", len(moves))
+
     if not moves:
+        print("⚠️ Aucun coup possible → abandon")
         return None
 
+    # 1. Jouer directement un coup gagnant
     winning_moves = []
 
     for move in moves:
@@ -256,36 +269,50 @@ def choose_move(state):
             winning_moves.append(move)
 
     if winning_moves:
+        print("🏆 Coup gagnant trouvé :", winning_moves)
         return random.choice(winning_moves)
 
+    # 2. Éviter les coups qui donnent une victoire directe à l'adversaire
     safe_moves = []
     studied_moves = []
 
     for move in moves:
         if time.time() - start_time >= time_limit:
+            print("⏱️ Temps écoulé pendant le filtre de sécurité")
+
             if safe_moves:
                 return random.choice(safe_moves)
+
             if studied_moves:
                 return random.choice(studied_moves)
+
             return random.choice(moves)
 
         future_state = apply_move_to_copy(state, move)
 
         if not opponent_can_win_next_turn(future_state, opponent_kind):
             safe_moves.append(move)
+        else:
+            print("⚠️ Move dangereux (donne win adverse) :", move)
 
         studied_moves.append(move)
+
+    print("Safe moves :", len(safe_moves), "/", len(moves))
 
     if safe_moves:
         moves = safe_moves
 
+    # 3. Trier les coups restants avec le score
     best_score = None
     best_moves = []
 
     for move in moves:
         if time.time() - start_time >= time_limit:
+            print("⏱️ Temps écoulé pendant le scoring")
+
             if best_moves:
                 return random.choice(best_moves)
+
             return random.choice(moves)
 
         score = score_move(move, my_kind)
@@ -296,6 +323,22 @@ def choose_move(state):
         danger = score_opponent_danger(opponent_moves, opponent_kind)
         score -= danger
 
+        # Nouvelle règle importante :
+        # on prend en compte la couleur imposée à l'adversaire.
+        # Si l'adversaire n'a aucun coup, c'est excellent.
+        # S'il a beaucoup de coups, c'est moins bon.
+        if len(opponent_moves) == 0:
+            score += 300
+        else:
+            score -= len(opponent_moves) * 5
+
+        print(
+            "Move :", move,
+            "| Score :", score,
+            "| Danger :", danger,
+            "| Coups adverses :", len(opponent_moves)
+        )
+
         if best_score is None or score > best_score:
             best_score = score
             best_moves = [move]
@@ -303,7 +346,14 @@ def choose_move(state):
         elif score == best_score:
             best_moves.append(move)
 
-    return random.choice(best_moves)
+    print("🏁 Meilleur score :", best_score)
+    print("🎯 Moves choisis :", best_moves)
+
+    chosen = random.choice(best_moves)
+
+    print("👉 Move final :", chosen)
+
+    return chosen
 
 def handle_message(sock):
     message = receive_json(sock)
