@@ -218,8 +218,6 @@ def choose_move(state):
                 return random.choice(studied_moves)
             return random.choice(moves)
 
-        studied_moves.append(move)
-
         end_r = move[1][0]
 
         if my_kind == "dark" and end_r == 0:
@@ -239,7 +237,9 @@ def choose_move(state):
             if time.time() - start_time >= time_limit:
                 if best_moves:
                     return random.choice(best_moves)
-                return random.choice(studied_moves)
+                if studied_moves:
+                    return random.choice(studied_moves)
+                return random.choice(moves)
 
             opponent_end_r = opponent_move[1][0]
 
@@ -254,6 +254,8 @@ def choose_move(state):
 
         danger = score_opponent_danger(opponent_moves, opponent_kind)
         score -= danger
+
+        studied_moves.append(move)
 
         if best_score is None or score > best_score:
             best_score = score
