@@ -15,13 +15,13 @@ from bot import (
     choose_move
 )
 
-
 def empty_board():
     return [[[None, None] for _ in range(8)] for _ in range(8)]
 
-def make_state(players=None, color=None, board=None):
+def make_state(players=None, color=None, board=None, current=0):
     return {
         "players": players or ["BERTHOFUSEE", "adversaire"],
+        "current": current,
         "color": color,
         "board": board or empty_board()
     }
@@ -133,6 +133,7 @@ def test_choose_move_light_player_returns_a_move():
 
     state = make_state(
         players=["adversaire", "BERTHOFUSEE"],
+        current=1,
         color="red",
         board=board
     )
