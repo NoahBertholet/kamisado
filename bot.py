@@ -46,7 +46,6 @@ funnylines = [
     "Tout est calculé... ou presque"
 ]
 
-
 def send_json(sock, message):
     json_string = json.dumps(message)
     json_bytes = json_string.encode("utf-8")
@@ -81,7 +80,6 @@ def receive_json(sock):
 
     return message
 
-
 def get_my_kind(state):
     players = state["players"]
     my_index = players.index(BOT_NAME)
@@ -93,7 +91,6 @@ def get_my_kind(state):
         return "dark"
     else:
         return "light"
-
 
 def get_possible_moves(state, kind):
     if kind is None:
@@ -141,7 +138,6 @@ def get_possible_moves(state, kind):
 
     return moves
 
-
 def apply_move_to_copy(state, move):
     new_state = copy.deepcopy(state)
     board = new_state["board"]
@@ -159,7 +155,6 @@ def apply_move_to_copy(state, move):
 
     return new_state
 
-
 def is_winning_move(move, kind):
     end_r = move[1][0]
 
@@ -171,7 +166,6 @@ def is_winning_move(move, kind):
 
     return False
 
-
 def score_move(move, my_kind):
     start, end = move
 
@@ -180,11 +174,9 @@ def score_move(move, my_kind):
 
     score = 0
 
-    # Coup gagnant
     if is_winning_move(move, my_kind):
         score += 10000
 
-    # Avancer vers la ligne de victoire
     if my_kind == "dark":
         avance = start_r - end_r
         distance_victoire = end_r
@@ -194,19 +186,15 @@ def score_move(move, my_kind):
 
     score += avance * 20
 
-    # Être proche de la ligne de victoire
     score += (7 - distance_victoire) * 10
 
-    # Favoriser le centre du plateau
     distance_from_center = abs(end_c - 3.5)
     score += (3.5 - distance_from_center) * 5
 
-    # Petit bonus pour les grands déplacements
     distance_move = abs(end_r - start_r) + abs(end_c - start_c)
     score += distance_move
 
     return score
-
 
 def opponent_can_win_next_turn(state, opponent_kind):
     opponent_moves = get_possible_moves(state, opponent_kind)
@@ -217,7 +205,6 @@ def opponent_can_win_next_turn(state, opponent_kind):
 
     return False
 
-
 def score_opponent_danger(opponent_moves, opponent_kind):
     if not opponent_moves:
         return 0
@@ -227,20 +214,17 @@ def score_opponent_danger(opponent_moves, opponent_kind):
     for move in opponent_moves:
         danger = 0
 
-        # Danger maximal si l'adversaire peut gagner
         if is_winning_move(move, opponent_kind):
             danger += 10000
 
         end_r = move[1][0]
         end_c = move[1][1]
 
-        # Plus l'adversaire est proche de sa victoire, plus c'est dangereux
         if opponent_kind == "dark":
             danger += (7 - end_r) * 10
         else:
             danger += end_r * 10
 
-        # Un pion adverse au centre est souvent plus dangereux
         distance_from_center = abs(end_c - 3.5)
         danger += (3.5 - distance_from_center) * 3
 
@@ -248,7 +232,6 @@ def score_opponent_danger(opponent_moves, opponent_kind):
             best_danger = danger
 
     return best_danger
-
 
 def choose_move(state):
     start_time = time.time()
@@ -263,16 +246,9 @@ def choose_move(state):
 
     moves = get_possible_moves(state, my_kind)
 
-
-    print("Je suis :", my_kind)
-    print("Couleur imposée :", state["color"])
-    print("Coups possibles :", moves)
-    print("Nombre de coups possibles :", len(moves))
-
     if not moves:
         return None
 
-    # 1. Jouer directement un coup gagnant
     winning_moves = []
 
     for move in moves:
@@ -282,7 +258,6 @@ def choose_move(state):
     if winning_moves:
         return random.choice(winning_moves)
 
-    # 2. Éviter les coups qui donnent une victoire directe à l'adversaire
     safe_moves = []
     studied_moves = []
 
@@ -304,7 +279,6 @@ def choose_move(state):
     if safe_moves:
         moves = safe_moves
 
-    # 3. Trier les coups restants selon des règles simples
     best_score = None
     best_moves = []
 
@@ -331,21 +305,17 @@ def choose_move(state):
 
     return random.choice(best_moves)
 
-
 def handle_message(sock):
     message = receive_json(sock)
-    print("Message recu", message)
 
     if message is None:
         return
 
     if message["request"] == "ping":
-        print("réponse envoyée: pong")
         send_json(sock, {"response": "pong"})
 
     elif message["request"] == "play":
         move = choose_move(message["state"])
-        print("Erreurs précédentes :", message.get("errors"))
 
         if move is None:
             send_json(sock, {"response": "giveup"})
@@ -356,23 +326,18 @@ def handle_message(sock):
                 "message": random.choice(funnylines)
             })
 
-
 def start_bot_server():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     server_socket.bind(("", BOT_PORT))
     server_socket.listen()
 
-    print(f"Bot en écoute sur le port {BOT_PORT}")
-
     while True:
         client_socket, address = server_socket.accept()
-        print("Connexion reçue de :", address)
 
         handle_message(client_socket)
 
         client_socket.close()
-
 
 def build_subscribe_message():
     return {
@@ -382,28 +347,18 @@ def build_subscribe_message():
         "matricules": ["24371", "23032"]
     }
 
-
 def subscribe_to_server():
-    print("Connexion au serveur...")
 
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((SERVER_HOST, SERVER_PORT))
 
-    print("Connexion établie")
-
     subscribe_message = build_subscribe_message()
 
-    print("Envoi du message subscribe...")
     send_json(client_socket, subscribe_message)
 
-    print("Attente de la réponse du serveur...")
     response = receive_json(client_socket)
 
-    print("Réponse du serveur :", response)
-
     client_socket.close()
-    print("Connexion fermée")
-
 
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=start_bot_server)
