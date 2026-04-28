@@ -9,7 +9,6 @@
 ## 🧠 Stratégie de l’IA
 
 Notre bot utilise une stratégie basée sur des règles simples du jeu Kamisado.  
-Il ne repose pas sur un algorithme complexe, mais sur une analyse des coups possibles à chaque tour.
 
 1. **Recherche d’un coup gagnant**  
    Le bot commence par vérifier si un coup permet de gagner immédiatement la partie.  
