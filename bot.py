@@ -263,6 +263,12 @@ def choose_move(state):
 
     moves = get_possible_moves(state, my_kind)
 
+
+    print("Je suis :", my_kind)
+    print("Couleur imposée :", state["color"])
+    print("Coups possibles :", moves)
+    print("Nombre de coups possibles :", len(moves))
+
     if not moves:
         return None
 
