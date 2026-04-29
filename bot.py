@@ -342,7 +342,7 @@ def build_subscribe_message():
         "request": "subscribe",
         "port": BOT_PORT,
         "name": BOT_NAME,
-        "matricules": ["17866", "66178"]
+        "matricules": ["24371", "23032"]
     }
 
 def subscribe_to_server():
