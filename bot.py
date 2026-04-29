@@ -8,7 +8,7 @@ import copy
 import time
 
 # constantes
-BOT_PORT = 8888
+BOT_PORT = 2222
 BOT_NAME = "Rafael"
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
@@ -290,7 +290,7 @@ def choose_move(state):
 
         nouvel_etat = apply_move_to_copy(state, move)
 
-        score = anticipation(nouvel_etat, 2, False, my_kind, opponent_kind)
+        score = anticipation(nouvel_etat, 2, False, my_kind, opponent_kind, start_time, time_limit)
 
         if score > meilleur_score:
             meilleur_score = score
@@ -358,31 +358,55 @@ def subscribe_to_server():
 
     client_socket.close()
 
-def anticipation(etat, preshot, Notre_Coup, mon_shot, shot_adverse):
+def anticipation(etat, preshot, Notre_Coup, mon_shot, shot_adverse, start_time, time_limit):
+    if time.time() - start_time >= time_limit:
+        return score_opponent_danger(get_possible_moves(etat, shot_adverse), shot_adverse) * -1
+
     if preshot == 0:
-        return 0
+        my_moves = get_possible_moves(etat, mon_shot)
+        opponent_moves = get_possible_moves(etat, shot_adverse)
+
+        my_score = 0
+        opponent_danger = score_opponent_danger(opponent_moves, shot_adverse)
+
+        for move in my_moves:
+            my_score = max(my_score, score_move(move, mon_shot))
+
+        return my_score - opponent_danger
 
     if Notre_Coup:
         meilleur_shot = -float("inf")
         coups = get_possible_moves(etat, mon_shot)
 
+        if not coups:
+            return -1000
+
         for coup in coups:
+            if time.time() - start_time >= time_limit:
+                return meilleur_shot
+
             test_shot = apply_move_to_copy(etat, coup)
-            score = anticipation(test_shot, preshot - 1, False, mon_shot, shot_adverse)
+            score = anticipation(test_shot, preshot - 1, False, mon_shot, shot_adverse, start_time, time_limit)
             meilleur_shot = max(meilleur_shot, score)
 
         return meilleur_shot
+
     else:
         meilleur_shot = float("inf")
         coups = get_possible_moves(etat, shot_adverse)
 
+        if not coups:
+            return 1000
+
         for coup in coups:
+            if time.time() - start_time >= time_limit:
+                return meilleur_shot
+
             test_shot = apply_move_to_copy(etat, coup)
-            score = anticipation(test_shot, preshot - 1, True, mon_shot, shot_adverse)
+            score = anticipation(test_shot, preshot - 1, True, mon_shot, shot_adverse, start_time, time_limit)
             meilleur_shot = min(meilleur_shot, score)
 
         return meilleur_shot
-
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=start_bot_server)
     bot_thread.start()
