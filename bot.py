@@ -8,7 +8,7 @@ import copy
 import time
 
 # constantes
-BOT_PORT = 2222
+BOT_PORT = 8888
 BOT_NAME = "Rafael"
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
