@@ -12,10 +12,9 @@ BOT_NAME = "ancienne"
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
 
-TIME_LIMIT = 2.4
+TIME_LIMIT = 2.2
 MAX_ROOT_MOVES = 10
 MAX_NEGAMAX_MOVES = 8
-NEGAMAX_DEPTH = 2
 
 DIRECTIONS = {
     "dark": [(-1, 0), (-1, -1), (-1, 1)],
