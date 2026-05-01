@@ -6,32 +6,49 @@ import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import bot
+
 from bot import (
     send_json,
     receive_json,
     handle_message,
     build_subscribe_message,
     BOT_PORT,
+    BOT_NAME,
     choose_move,
     get_my_kind,
     get_possible_moves,
-    apply_move_to_copy,
+    play_move,
+    undo_move,
     is_winning_move,
     score_move,
+    sort_moves,
     opponent_can_win_next_turn,
-    score_opponent_danger
+    score_opponent_danger,
+    evaluation,
+    negamax
 )
+
+
+@pytest.fixture(autouse=True)
+def fast_bot(monkeypatch):
+    monkeypatch.setattr(bot, "TIME_LIMIT", 0.08)
+    monkeypatch.setattr(bot, "MAX_ROOT_MOVES", 6)
+    monkeypatch.setattr(bot, "MAX_NEGAMAX_MOVES", 5)
+
 
 def empty_board():
     return [[[None, None] for _ in range(8)] for _ in range(8)]
 
+
 def make_state(players=None, color=None, board=None, current=0):
     return {
-        "players": players or ["BERTHOFUSEE", "adversaire"],
+        "players": players or [BOT_NAME, "adversaire"],
         "current": current,
         "color": color,
         "board": board or empty_board()
     }
+
 
 def test_send_and_receive_json():
     socket_1, socket_2 = socket.socketpair()
@@ -46,9 +63,9 @@ def test_send_and_receive_json():
 
     assert received == message
 
+
 def test_receive_json_no_data():
     socket_1, socket_2 = socket.socketpair()
-
     socket_1.close()
 
     result = receive_json(socket_2)
@@ -56,13 +73,12 @@ def test_receive_json_no_data():
     socket_2.close()
 
     assert result is None
+
 
 def test_receive_json_incomplete_data():
     socket_1, socket_2 = socket.socketpair()
 
-    size_bytes = struct.pack("I", 10)
-    socket_1.sendall(size_bytes)
-
+    socket_1.sendall(struct.pack("I", 10))
     socket_1.close()
 
     result = receive_json(socket_2)
@@ -70,14 +86,16 @@ def test_receive_json_incomplete_data():
     socket_2.close()
 
     assert result is None
+
 
 def test_build_subscribe_message():
     message = build_subscribe_message()
 
     assert message["request"] == "subscribe"
     assert message["port"] == BOT_PORT
-    assert message["name"] == "BERTHOFUSEE"
+    assert message["name"] == BOT_NAME
     assert message["matricules"] == ["24371", "23032"]
+
 
 def test_handle_message_ping():
     socket_1, socket_2 = socket.socketpair()
@@ -92,6 +110,18 @@ def test_handle_message_ping():
 
     assert response == {"response": "pong"}
 
+
+def test_handle_message_none_does_not_crash():
+    socket_1, socket_2 = socket.socketpair()
+    socket_1.close()
+
+    result = handle_message(socket_2)
+
+    socket_2.close()
+
+    assert result is None
+
+
 def test_handle_message_play_giveup_when_no_move():
     socket_1, socket_2 = socket.socketpair()
 
@@ -104,7 +134,6 @@ def test_handle_message_play_giveup_when_no_move():
     })
 
     handle_message(socket_2)
-
     response = receive_json(socket_1)
 
     socket_1.close()
@@ -112,327 +141,6 @@ def test_handle_message_play_giveup_when_no_move():
 
     assert response == {"response": "giveup"}
 
-def test_choose_move_returns_none_when_no_piece_can_move():
-    state = make_state(color="blue")
-
-    move = choose_move(state)
-
-    assert move is None
-
-def test_choose_move_dark_player_returns_a_move():
-    board = empty_board()
-    board[7][7][1] = ("blue", "dark")
-
-    state = make_state(
-        players=["BERTHOFUSEE", "adversaire"],
-        color="blue",
-        board=board
-    )
-
-    move = choose_move(state)
-
-    assert move is not None
-    assert move[0] == [7, 7]
-
-def test_choose_move_light_player_returns_a_move():
-    board = empty_board()
-    board[0][0][1] = ("red", "light")
-
-    state = make_state(
-        players=["adversaire", "BERTHOFUSEE"],
-        current=1,
-        color="red",
-        board=board
-    )
-
-    move = choose_move(state)
-
-    assert move is not None
-    assert move[0] == [0, 0]
-
-def test_choose_move_respects_required_color():
-    board = empty_board()
-    board[7][0][1] = ("blue", "dark")
-    board[7][7][1] = ("red", "dark")
-
-    state = make_state(
-        players=["BERTHOFUSEE", "adversaire"],
-        color="red",
-        board=board
-    )
-
-    move = choose_move(state)
-
-    assert move is not None
-    assert move[0] == [7, 7]
-
-def test_choose_move_ignores_wrong_color():
-    board = empty_board()
-    board[7][7][1] = ("blue", "dark")
-
-    state = make_state(
-        players=["BERTHOFUSEE", "adversaire"],
-        color="red",
-        board=board
-    )
-
-    move = choose_move(state)
-
-    assert move is None
-
-def test_choose_move_ignores_opponent_piece():
-    board = empty_board()
-    board[7][7][1] = ("blue", "light")
-
-    state = make_state(
-        players=["BERTHOFUSEE", "adversaire"],
-        color="blue",
-        board=board
-    )
-
-    move = choose_move(state)
-
-    assert move is None
-
-def test_choose_move_does_not_go_outside_board():
-    board = empty_board()
-    board[7][7][1] = ("blue", "dark")
-
-    state = make_state(color="blue", board=board)
-
-    move = choose_move(state)
-
-    assert move is not None
-
-    start, end = move
-    assert 0 <= start[0] < 8
-    assert 0 <= start[1] < 8
-    assert 0 <= end[0] < 8
-    assert 0 <= end[1] < 8
-
-def test_choose_move_does_not_move_on_occupied_square():
-    board = empty_board()
-    board[7][7][1] = ("blue", "dark")
-    board[6][7][1] = ("red", "light")
-
-    state = make_state(color="blue", board=board)
-
-    move = choose_move(state)
-
-    assert move is not None
-    assert move[1] != [6, 7]
-
-def test_choose_move_returns_none_when_piece_is_blocked():
-    board = empty_board()
-    board[7][7][1] = ("blue", "dark")
-    board[6][7][1] = ("red", "light")
-    board[6][6][1] = ("red", "light")
-
-    state = make_state(color="blue", board=board)
-
-    move = choose_move(state)
-
-    assert move is None
-
-def test_choose_move_without_required_color_can_play_any_own_piece():
-    board = empty_board()
-    board[7][7][1] = ("blue", "dark")
-
-    state = make_state(color=None, board=board)
-
-    move = choose_move(state)
-
-    assert move is not None
-    assert move[0] == [7, 7]
-
-def test_choose_move_raises_error_if_bot_name_not_in_players():
-    state = make_state(players=["joueur1", "joueur2"])
-
-    with pytest.raises(ValueError):
-        choose_move(state)
-
-def test_handle_message_none_does_not_crash():
-    socket_1, socket_2 = socket.socketpair()
-
-    socket_1.close()
-
-    result = handle_message(socket_2)
-
-    socket_2.close()
-
-    assert result is None
-
-def test_get_my_kind_returns_none_when_not_my_turn():
-    state = make_state(current=1)
-
-    result = get_my_kind(state)
-
-    assert result is None
-
-def test_get_my_kind_dark_when_bot_is_first_player():
-    state = make_state(players=["BERTHOFUSEE", "adversaire"], current=0)
-
-    result = get_my_kind(state)
-
-    assert result == "dark"
-
-def test_get_my_kind_light_when_bot_is_second_player():
-    state = make_state(players=["adversaire", "BERTHOFUSEE"], current=1)
-
-    result = get_my_kind(state)
-
-    assert result == "light"
-
-def test_get_possible_moves_returns_empty_when_kind_is_none():
-    state = make_state()
-
-    moves = get_possible_moves(state, None)
-
-    assert moves == []
-
-def test_get_possible_moves_dark_can_move_forward_and_diagonal():
-    board = empty_board()
-    board[7][3][1] = ("blue", "dark")
-
-    state = make_state(color="blue", board=board)
-
-    moves = get_possible_moves(state, "dark")
-
-    assert [[7, 3], [6, 3]] in moves
-    assert [[7, 3], [6, 2]] in moves
-    assert [[7, 3], [6, 4]] in moves
-
-def test_get_possible_moves_light_can_move_forward_and_diagonal():
-    board = empty_board()
-    board[0][3][1] = ("blue", "light")
-
-    state = make_state(
-        players=["adversaire", "BERTHOFUSEE"],
-        current=1,
-        color="blue",
-        board=board
-    )
-
-    moves = get_possible_moves(state, "light")
-
-    assert [[0, 3], [1, 3]] in moves
-    assert [[0, 3], [1, 2]] in moves
-    assert [[0, 3], [1, 4]] in moves
-
-def test_get_possible_moves_stops_before_occupied_square():
-    board = empty_board()
-    board[7][3][1] = ("blue", "dark")
-    board[5][3][1] = ("red", "light")
-
-    state = make_state(color="blue", board=board)
-
-    moves = get_possible_moves(state, "dark")
-
-    assert [[7, 3], [6, 3]] in moves
-    assert [[7, 3], [5, 3]] not in moves
-    assert [[7, 3], [4, 3]] not in moves
-
-def test_apply_move_to_copy_moves_piece_without_changing_original_state():
-    board = empty_board()
-    board[7][3][0] = "blue"
-    board[7][3][1] = ("red", "dark")
-    board[5][3][0] = "yellow"
-
-    state = make_state(color="red", board=board)
-    move = [[7, 3], [5, 3]]
-
-    new_state = apply_move_to_copy(state, move)
-
-    assert state["board"][7][3][1] == ("red", "dark")
-    assert state["board"][5][3][1] is None
-
-    assert new_state["board"][7][3][1] is None
-    assert new_state["board"][5][3][1] == ("red", "dark")
-    assert new_state["color"] == "yellow"
-
-def test_is_winning_move_dark():
-    move = [[2, 3], [0, 3]]
-
-    assert is_winning_move(move, "dark") is True
-
-def test_is_winning_move_light():
-    move = [[5, 3], [7, 3]]
-
-    assert is_winning_move(move, "light") is True
-
-def test_is_winning_move_false_when_not_on_final_row():
-    move = [[7, 3], [6, 3]]
-
-    assert is_winning_move(move, "dark") is False
-
-def test_score_move_winning_move_has_big_score():
-    winning_move = [[1, 3], [0, 3]]
-    normal_move = [[7, 3], [6, 3]]
-
-    assert score_move(winning_move, "dark") > score_move(normal_move, "dark")
-
-def test_opponent_can_win_next_turn_true():
-    board = empty_board()
-    board[1][3][1] = ("blue", "dark")
-
-    state = make_state(color="blue", board=board)
-
-    result = opponent_can_win_next_turn(state, "dark")
-
-    assert result is True
-
-def test_opponent_can_win_next_turn_false():
-    board = empty_board()
-    board[7][3][1] = ("blue", "dark")
-    board[6][3][1] = ("red", "light")
-    board[6][2][1] = ("red", "light")
-    board[6][4][1] = ("red", "light")
-
-    state = make_state(color="blue", board=board)
-
-    result = opponent_can_win_next_turn(state, "dark")
-
-    assert result is False
-
-def test_score_opponent_danger_returns_zero_when_no_moves():
-    danger = score_opponent_danger([], "dark")
-
-    assert danger == 0
-
-def test_score_opponent_danger_detects_winning_move_as_dangerous():
-    moves = [
-        [[3, 3], [2, 3]],
-        [[1, 3], [0, 3]]
-    ]
-
-    danger = score_opponent_danger(moves, "dark")
-
-    assert danger >= 10000
-
-def test_choose_move_prefers_immediate_winning_move_dark():
-    board = empty_board()
-    board[1][3][1] = ("blue", "dark")
-
-    state = make_state(color="blue", board=board)
-
-    move = choose_move(state)
-
-    assert is_winning_move(move, "dark")
-
-def test_choose_move_prefers_immediate_winning_move_light():
-    board = empty_board()
-    board[6][3][1] = ("blue", "light")
-
-    state = make_state(
-        players=["adversaire", "BERTHOFUSEE"],
-        current=1,
-        color="blue",
-        board=board
-    )
-
-    move = choose_move(state)
-
-    assert is_winning_move(move, "light")
 
 def test_handle_message_play_returns_move_response_when_move_exists():
     socket_1, socket_2 = socket.socketpair()
@@ -449,7 +157,6 @@ def test_handle_message_play_returns_move_response_when_move_exists():
     })
 
     handle_message(socket_2)
-
     response = receive_json(socket_1)
 
     socket_1.close()
@@ -458,3 +165,554 @@ def test_handle_message_play_returns_move_response_when_move_exists():
     assert response["response"] == "move"
     assert response["move"] is not None
     assert "message" in response
+
+
+def test_get_my_kind_returns_none_when_not_my_turn():
+    state = make_state(current=1)
+
+    assert get_my_kind(state) is None
+
+
+def test_get_my_kind_dark_when_bot_is_first_player():
+    state = make_state(players=[BOT_NAME, "adversaire"], current=0)
+
+    assert get_my_kind(state) == "dark"
+
+
+def test_get_my_kind_light_when_bot_is_second_player():
+    state = make_state(players=["adversaire", BOT_NAME], current=1)
+
+    assert get_my_kind(state) == "light"
+
+
+def test_get_my_kind_raises_error_if_bot_name_not_in_players():
+    state = make_state(players=["joueur1", "joueur2"])
+
+    with pytest.raises(ValueError):
+        get_my_kind(state)
+
+
+def test_get_possible_moves_returns_empty_when_kind_is_none():
+    state = make_state()
+
+    assert get_possible_moves(state, None) == []
+
+
+def test_get_possible_moves_dark_can_move_forward_and_diagonal():
+    board = empty_board()
+    board[7][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    moves = get_possible_moves(state, "dark")
+
+    assert [[7, 3], [6, 3]] in moves
+    assert [[7, 3], [6, 2]] in moves
+    assert [[7, 3], [6, 4]] in moves
+
+
+def test_get_possible_moves_light_can_move_forward_and_diagonal():
+    board = empty_board()
+    board[0][3][1] = ("blue", "light")
+
+    state = make_state(
+        players=["adversaire", BOT_NAME],
+        current=1,
+        color="blue",
+        board=board
+    )
+
+    moves = get_possible_moves(state, "light")
+
+    assert [[0, 3], [1, 3]] in moves
+    assert [[0, 3], [1, 2]] in moves
+    assert [[0, 3], [1, 4]] in moves
+
+
+def test_get_possible_moves_respects_required_color():
+    board = empty_board()
+    board[7][0][1] = ("blue", "dark")
+    board[7][7][1] = ("red", "dark")
+
+    state = make_state(color="red", board=board)
+
+    moves = get_possible_moves(state, "dark")
+
+    assert all(move[0] == [7, 7] for move in moves)
+
+
+def test_get_possible_moves_without_required_color_can_play_any_piece():
+    board = empty_board()
+    board[7][0][1] = ("blue", "dark")
+    board[7][7][1] = ("red", "dark")
+
+    state = make_state(color=None, board=board)
+
+    moves = get_possible_moves(state, "dark")
+
+    assert any(move[0] == [7, 0] for move in moves)
+    assert any(move[0] == [7, 7] for move in moves)
+
+
+def test_get_possible_moves_ignores_opponent_piece():
+    board = empty_board()
+    board[7][7][1] = ("blue", "light")
+
+    state = make_state(color="blue", board=board)
+
+    moves = get_possible_moves(state, "dark")
+
+    assert moves == []
+
+
+def test_get_possible_moves_stops_before_occupied_square():
+    board = empty_board()
+    board[7][3][1] = ("blue", "dark")
+    board[5][3][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    moves = get_possible_moves(state, "dark")
+
+    assert [[7, 3], [6, 3]] in moves
+    assert [[7, 3], [5, 3]] not in moves
+    assert [[7, 3], [4, 3]] not in moves
+
+
+def test_get_possible_moves_blocked_piece_has_no_moves():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+    board[6][7][1] = ("red", "light")
+    board[6][6][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    assert get_possible_moves(state, "dark") == []
+
+
+def test_play_move_moves_piece_and_changes_color():
+    board = empty_board()
+    board[7][3][1] = ("red", "dark")
+    board[5][3][0] = "yellow"
+
+    state = make_state(color="red", board=board)
+    move = [[7, 3], [5, 3]]
+
+    old_color, piece = play_move(state, move)
+
+    assert old_color == "red"
+    assert piece == ("red", "dark")
+    assert state["board"][7][3][1] is None
+    assert state["board"][5][3][1] == ("red", "dark")
+    assert state["color"] == "yellow"
+
+
+def test_undo_move_restores_state():
+    board = empty_board()
+    board[7][3][1] = ("red", "dark")
+    board[5][3][0] = "yellow"
+
+    state = make_state(color="red", board=board)
+    move = [[7, 3], [5, 3]]
+
+    old_color, piece = play_move(state, move)
+    undo_move(state, move, old_color, piece)
+
+    assert state["board"][7][3][1] == ("red", "dark")
+    assert state["board"][5][3][1] is None
+    assert state["color"] == "red"
+
+
+def test_is_winning_move_dark():
+    move = [[2, 3], [0, 3]]
+
+    assert is_winning_move(move, "dark") is True
+
+
+def test_is_winning_move_light():
+    move = [[5, 3], [7, 3]]
+
+    assert is_winning_move(move, "light") is True
+
+
+def test_is_winning_move_false_when_not_on_final_row():
+    move = [[7, 3], [6, 3]]
+
+    assert is_winning_move(move, "dark") is False
+
+
+def test_is_winning_move_false_with_unknown_kind():
+    move = [[7, 3], [6, 3]]
+
+    assert is_winning_move(move, "unknown") is False
+
+
+def test_score_move_winning_move_has_big_score():
+    winning_move = [[1, 3], [0, 3]]
+    normal_move = [[7, 3], [6, 3]]
+
+    assert score_move(winning_move, "dark") > score_move(normal_move, "dark")
+
+
+def test_score_move_light_progression():
+    move = [[0, 3], [4, 3]]
+
+    assert score_move(move, "light") > 0
+
+
+def test_sort_moves_puts_best_move_first():
+    moves = [
+        [[7, 3], [6, 3]],
+        [[1, 3], [0, 3]],
+        [[7, 0], [6, 0]]
+    ]
+
+    sorted_moves = sort_moves(moves, "dark")
+
+    assert sorted_moves[0] == [[1, 3], [0, 3]]
+
+
+def test_opponent_can_win_next_turn_true():
+    board = empty_board()
+    board[1][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    assert opponent_can_win_next_turn(state, "dark") is True
+
+
+def test_opponent_can_win_next_turn_false_when_blocked():
+    board = empty_board()
+    board[7][3][1] = ("blue", "dark")
+    board[6][3][1] = ("red", "light")
+    board[6][2][1] = ("red", "light")
+    board[6][4][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    assert opponent_can_win_next_turn(state, "dark") is False
+
+
+def test_score_opponent_danger_returns_zero_when_no_moves():
+    assert score_opponent_danger([], "dark") == 0
+
+
+def test_score_opponent_danger_detects_winning_move_as_dangerous():
+    moves = [
+        [[3, 3], [2, 3]],
+        [[1, 3], [0, 3]]
+    ]
+
+    danger = score_opponent_danger(moves, "dark")
+
+    assert danger >= 10000
+
+
+def test_score_opponent_danger_normal_move_positive():
+    moves = [
+        [[7, 3], [6, 3]],
+        [[7, 3], [5, 3]]
+    ]
+
+    danger = score_opponent_danger(moves, "dark")
+
+    assert danger > 0
+
+
+def test_evaluation_positive_when_my_piece_is_advanced():
+    board = empty_board()
+    board[2][3][1] = ("blue", "dark")
+    board[7][7][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    score = evaluation(state, "dark", "light")
+
+    assert score > 0
+
+
+def test_evaluation_negative_when_opponent_piece_is_advanced():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+    board[6][3][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    score = evaluation(state, "dark", "light")
+
+    assert score < 0
+
+
+def test_evaluation_ignores_empty_board():
+    state = make_state()
+
+    assert evaluation(state, "dark", "light") == 0
+
+
+def test_evaluation_rewards_free_forward_path():
+    board_free = empty_board()
+    board_blocked = empty_board()
+
+    board_free[4][3][1] = ("blue", "dark")
+
+    board_blocked[4][3][1] = ("blue", "dark")
+    board_blocked[3][3][1] = ("red", "light")
+
+    state_free = make_state(color="blue", board=board_free)
+    state_blocked = make_state(color="blue", board=board_blocked)
+
+    assert evaluation(state_free, "dark", "light") > evaluation(state_blocked, "dark", "light")
+
+
+def test_negamax_returns_evaluation_at_depth_zero():
+    board = empty_board()
+    board[7][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    score = negamax(
+        state,
+        depth=0,
+        alpha=-float("inf"),
+        beta=float("inf"),
+        joueur="dark",
+        adversaire="light",
+        start_time=bot.time.perf_counter(),
+        time_limit=1
+    )
+
+    assert score == evaluation(state, "dark", "light")
+
+
+def test_negamax_returns_negative_when_no_moves():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+    board[6][7][1] = ("red", "light")
+    board[6][6][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    score = negamax(
+        state,
+        depth=1,
+        alpha=-float("inf"),
+        beta=float("inf"),
+        joueur="dark",
+        adversaire="light",
+        start_time=bot.time.perf_counter(),
+        time_limit=1
+    )
+
+    assert score == -1000
+
+
+def test_negamax_detects_winning_move():
+    board = empty_board()
+    board[1][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    score = negamax(
+        state,
+        depth=1,
+        alpha=-float("inf"),
+        beta=float("inf"),
+        joueur="dark",
+        adversaire="light",
+        start_time=bot.time.perf_counter(),
+        time_limit=1
+    )
+
+    assert score >= 100000
+
+
+def test_negamax_returns_evaluation_when_time_is_over():
+    board = empty_board()
+    board[7][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    score = negamax(
+        state,
+        depth=3,
+        alpha=-float("inf"),
+        beta=float("inf"),
+        joueur="dark",
+        adversaire="light",
+        start_time=bot.time.perf_counter() - 10,
+        time_limit=0.01
+    )
+
+    assert score == evaluation(state, "dark", "light")
+
+
+def test_choose_move_returns_none_when_no_piece_can_move():
+    state = make_state(color="blue")
+
+    assert choose_move(state) is None
+
+
+def test_choose_move_dark_player_returns_a_move():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    move = choose_move(state)
+
+    assert move is not None
+    assert move[0] == [7, 7]
+
+
+def test_choose_move_light_player_returns_a_move():
+    board = empty_board()
+    board[0][0][1] = ("red", "light")
+
+    state = make_state(
+        players=["adversaire", BOT_NAME],
+        current=1,
+        color="red",
+        board=board
+    )
+
+    move = choose_move(state)
+
+    assert move is not None
+    assert move[0] == [0, 0]
+
+
+def test_choose_move_respects_required_color():
+    board = empty_board()
+    board[7][0][1] = ("blue", "dark")
+    board[7][7][1] = ("red", "dark")
+
+    state = make_state(color="red", board=board)
+
+    move = choose_move(state)
+
+    assert move is not None
+    assert move[0] == [7, 7]
+
+
+def test_choose_move_ignores_wrong_color():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+
+    state = make_state(color="red", board=board)
+
+    assert choose_move(state) is None
+
+
+def test_choose_move_ignores_opponent_piece():
+    board = empty_board()
+    board[7][7][1] = ("blue", "light")
+
+    state = make_state(color="blue", board=board)
+
+    assert choose_move(state) is None
+
+
+def test_choose_move_does_not_go_outside_board():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    start, end = choose_move(state)
+
+    assert 0 <= start[0] < 8
+    assert 0 <= start[1] < 8
+    assert 0 <= end[0] < 8
+    assert 0 <= end[1] < 8
+
+
+def test_choose_move_does_not_move_on_occupied_square():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+    board[6][7][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    move = choose_move(state)
+
+    assert move is not None
+    assert move[1] != [6, 7]
+
+
+def test_choose_move_returns_none_when_piece_is_blocked():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+    board[6][7][1] = ("red", "light")
+    board[6][6][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    assert choose_move(state) is None
+
+
+def test_choose_move_without_required_color_can_play_any_own_piece():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+
+    state = make_state(color=None, board=board)
+
+    move = choose_move(state)
+
+    assert move is not None
+    assert move[0] == [7, 7]
+
+
+def test_choose_move_returns_none_when_not_my_turn():
+    board = empty_board()
+    board[7][7][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board, current=1)
+
+    assert choose_move(state) is None
+
+
+def test_choose_move_raises_error_if_bot_name_not_in_players():
+    state = make_state(players=["joueur1", "joueur2"])
+
+    with pytest.raises(ValueError):
+        choose_move(state)
+
+
+def test_choose_move_prefers_immediate_winning_move_dark():
+    board = empty_board()
+    board[1][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    move = choose_move(state)
+
+    assert is_winning_move(move, "dark")
+
+
+def test_choose_move_prefers_immediate_winning_move_light():
+    board = empty_board()
+    board[6][3][1] = ("blue", "light")
+
+    state = make_state(
+        players=["adversaire", BOT_NAME],
+        current=1,
+        color="blue",
+        board=board
+    )
+
+    move = choose_move(state)
+
+    assert is_winning_move(move, "light")
+
+
+def test_choose_move_fallback_when_time_limit_is_tiny(monkeypatch):
+    monkeypatch.setattr(bot, "TIME_LIMIT", 0.000001)
+
+    board = empty_board()
+    board[7][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    move = choose_move(state)
+
+    assert move is not None
