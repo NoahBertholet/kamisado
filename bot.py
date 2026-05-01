@@ -13,6 +13,11 @@ BOT_NAME = "BERTHOFUSEE"
 SERVER_HOST = "localhost"
 SERVER_PORT = 3000
 
+TIME_LIMIT = 2.4
+MAX_ROOT_MOVES = 10
+MAX_NEGAMAX_MOVES = 8
+NEGAMAX_DEPTH = 2
+
 funnylines = [
     "Je réfléchis très fort...",
     "Coup calculé à 200 IQ",
@@ -184,7 +189,6 @@ def score_move(move, my_kind):
         distance_victoire = 7 - end_r
 
     score += avance * 12
-
     score += (7 - distance_victoire) * 7
 
     distance_from_center = abs(end_c - 3.5)
@@ -194,6 +198,9 @@ def score_move(move, my_kind):
     score += distance_move
 
     return score
+
+def sort_moves(moves, kind):
+    return sorted(moves, key=lambda move: score_move(move, kind), reverse=True)
 
 def opponent_can_win_next_turn(state, opponent_kind):
     opponent_moves = get_possible_moves(state, opponent_kind)
@@ -232,9 +239,75 @@ def score_opponent_danger(opponent_moves, opponent_kind):
 
     return best_danger
 
+def evaluation(state, joueur, adversaire):
+    my_moves = get_possible_moves(state, joueur)
+    opponent_moves = get_possible_moves(state, adversaire)
+
+    if not my_moves:
+        return -1000
+
+    my_score = 0
+
+    for move in my_moves:
+        my_score = max(my_score, score_move(move, joueur))
+
+    opponent_danger = score_opponent_danger(opponent_moves, adversaire)
+
+    return my_score - opponent_danger
+
+def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limit):
+    if time.time() - start_time >= time_limit:
+        return evaluation(state, joueur, adversaire)
+
+    if depth == 0:
+        return evaluation(state, joueur, adversaire)
+
+    moves = get_possible_moves(state, joueur)
+
+    if not moves:
+        return -1000
+
+    moves = sort_moves(moves, joueur)
+    moves = moves[:MAX_NEGAMAX_MOVES]
+
+    meilleur_score = -float("inf")
+
+    for move in moves:
+        if time.time() - start_time >= time_limit:
+            if meilleur_score == -float("inf"):
+                return evaluation(state, joueur, adversaire)
+            return meilleur_score
+
+        if is_winning_move(move, joueur):
+            score = 100000 + depth
+        else:
+            new_state = apply_move_to_copy(state, move)
+
+            score = -negamax(
+                new_state,
+                depth - 1,
+                -beta,
+                -alpha,
+                adversaire,
+                joueur,
+                start_time,
+                time_limit
+            )
+
+        if score > meilleur_score:
+            meilleur_score = score
+
+        if score > alpha:
+            alpha = score
+
+        if alpha >= beta:
+            break
+
+    return meilleur_score
+
 def choose_move(state):
     start_time = time.time()
-    time_limit = 2.8
+    time_limit = TIME_LIMIT
 
     my_kind = get_my_kind(state)
 
@@ -248,49 +321,55 @@ def choose_move(state):
     if not moves:
         return None
 
-    winning_moves = []
+    moves = sort_moves(moves, my_kind)
 
     for move in moves:
         if is_winning_move(move, my_kind):
-            winning_moves.append(move)
-
-    if winning_moves:
-        return random.choice(winning_moves)
+            return move
 
     safe_moves = []
     studied_moves = []
 
     for move in moves:
         if time.time() - start_time >= time_limit:
-
             if safe_moves:
                 return random.choice(safe_moves)
-
             if studied_moves:
                 return random.choice(studied_moves)
-
             return random.choice(moves)
 
         future_state = apply_move_to_copy(state, move)
 
         if not opponent_can_win_next_turn(future_state, opponent_kind):
             safe_moves.append(move)
-            
+
         studied_moves.append(move)
 
     if safe_moves:
         moves = safe_moves
 
-        meilleur_score = -float("inf")
-        meilleurs_coups = []
+    moves = sort_moves(moves, my_kind)
+    moves = moves[:MAX_ROOT_MOVES]
+
+    meilleur_score = -float("inf")
+    meilleurs_coups = []
 
     for move in moves:
         if time.time() - start_time >= time_limit:
             break
 
-        nouvel_etat = apply_move_to_copy(state, move)
+        new_state = apply_move_to_copy(state, move)
 
-        score = anticipation(nouvel_etat, 2, False, my_kind, opponent_kind, start_time, time_limit)
+        score = -negamax(
+            new_state,
+            NEGAMAX_DEPTH,
+            -float("inf"),
+            float("inf"),
+            opponent_kind,
+            my_kind,
+            start_time,
+            time_limit
+        )
 
         if score > meilleur_score:
             meilleur_score = score
@@ -301,7 +380,7 @@ def choose_move(state):
     if meilleurs_coups:
         return random.choice(meilleurs_coups)
 
-    return random.choice(moves)
+    return moves[0]
 
 def handle_message(sock):
     message = receive_json(sock)
@@ -346,7 +425,6 @@ def build_subscribe_message():
     }
 
 def subscribe_to_server():
-
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client_socket.connect((SERVER_HOST, SERVER_PORT))
 
@@ -358,55 +436,6 @@ def subscribe_to_server():
 
     client_socket.close()
 
-def anticipation(etat, preshot, Notre_Coup, mon_shot, shot_adverse, start_time, time_limit):
-    if time.time() - start_time >= time_limit:
-        return score_opponent_danger(get_possible_moves(etat, shot_adverse), shot_adverse) * -1
-
-    if preshot == 0:
-        my_moves = get_possible_moves(etat, mon_shot)
-        opponent_moves = get_possible_moves(etat, shot_adverse)
-
-        my_score = 0
-        opponent_danger = score_opponent_danger(opponent_moves, shot_adverse)
-
-        for move in my_moves:
-            my_score = max(my_score, score_move(move, mon_shot))
-
-        return my_score - opponent_danger
-
-    if Notre_Coup:
-        meilleur_shot = -float("inf")
-        coups = get_possible_moves(etat, mon_shot)
-
-        if not coups:
-            return -1000
-
-        for coup in coups:
-            if time.time() - start_time >= time_limit:
-                return meilleur_shot
-
-            test_shot = apply_move_to_copy(etat, coup)
-            score = anticipation(test_shot, preshot - 1, False, mon_shot, shot_adverse, start_time, time_limit)
-            meilleur_shot = max(meilleur_shot, score)
-
-        return meilleur_shot
-
-    else:
-        meilleur_shot = float("inf")
-        coups = get_possible_moves(etat, shot_adverse)
-
-        if not coups:
-            return 1000
-
-        for coup in coups:
-            if time.time() - start_time >= time_limit:
-                return meilleur_shot
-
-            test_shot = apply_move_to_copy(etat, coup)
-            score = anticipation(test_shot, preshot - 1, True, mon_shot, shot_adverse, start_time, time_limit)
-            meilleur_shot = min(meilleur_shot, score)
-
-        return meilleur_shot
 if __name__ == "__main__":
     bot_thread = threading.Thread(target=start_bot_server)
     bot_thread.start()
