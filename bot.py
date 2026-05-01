@@ -452,6 +452,8 @@ def choose_move(state):
 
         depth += 1
 
+    print("profondeur atteinte :", depth - 1)
+    print("profondeur réelle :", depth)
     if best_move is not None:
         return best_move
 
