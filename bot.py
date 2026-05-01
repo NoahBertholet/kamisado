@@ -4,7 +4,6 @@ import struct
 import socket
 import threading
 import random
-import copy
 import time
 
 # constantes
@@ -17,6 +16,13 @@ TIME_LIMIT = 2.4
 MAX_ROOT_MOVES = 10
 MAX_NEGAMAX_MOVES = 8
 NEGAMAX_DEPTH = 2
+
+DIRECTIONS = {
+    "dark": [(-1, 0), (-1, -1), (-1, 1)],
+    "light": [(1, 0), (1, -1), (1, 1)]
+}
+
+CENTER_BONUS = [0, 5, 10, 15, 15, 10, 5, 0]
 
 funnylines = [
     "Je réfléchis très fort...",
@@ -54,9 +60,7 @@ funnylines = [
 def send_json(sock, message):
     json_string = json.dumps(message)
     json_bytes = json_string.encode("utf-8")
-
-    message_size = len(json_bytes)
-    size_bytes = struct.pack("I", message_size)
+    size_bytes = struct.pack("I", len(json_bytes))
 
     sock.sendall(size_bytes)
     sock.sendall(json_bytes)
@@ -68,7 +72,6 @@ def receive_json(sock):
         return None
 
     message_size = struct.unpack("I", size_bytes)[0]
-
     json_bytes = b""
 
     while len(json_bytes) < message_size:
@@ -79,10 +82,7 @@ def receive_json(sock):
 
         json_bytes += chunk
 
-    json_string = json_bytes.decode("utf-8")
-    message = json.loads(json_string)
-
-    return message
+    return json.loads(json_bytes.decode("utf-8"))
 
 def get_my_kind(state):
     players = state["players"]
@@ -93,8 +93,7 @@ def get_my_kind(state):
 
     if my_index == 0:
         return "dark"
-    else:
-        return "light"
+    return "light"
 
 def get_possible_moves(state, kind):
     if kind is None:
@@ -102,19 +101,15 @@ def get_possible_moves(state, kind):
 
     board = state["board"]
     required_color = state["color"]
+    directions = DIRECTIONS[kind]
 
     moves = []
 
-    if kind == "dark":
-        directions = [(-1, 0), (-1, -1), (-1, 1)]
-    elif kind == "light":
-        directions = [(1, 0), (1, -1), (1, 1)]
-    else:
-        return []
-
     for r in range(8):
+        row = board[r]
+
         for c in range(8):
-            piece = board[r][c][1]
+            piece = row[c][1]
 
             if piece is None:
                 continue
@@ -142,31 +137,43 @@ def get_possible_moves(state, kind):
 
     return moves
 
-def apply_move_to_copy(state, move):
-    new_state = copy.deepcopy(state)
-    board = new_state["board"]
+def play_move(state, move):
+    board = state["board"]
 
     start, end = move
     start_r, start_c = start
     end_r, end_c = end
 
+    old_color = state["color"]
     piece = board[start_r][start_c][1]
 
     board[start_r][start_c][1] = None
     board[end_r][end_c][1] = piece
 
-    new_state["color"] = board[end_r][end_c][0]
+    state["color"] = board[end_r][end_c][0]
 
-    return new_state
+    return old_color, piece
+
+def undo_move(state, move, old_color, piece):
+    board = state["board"]
+
+    start, end = move
+    start_r, start_c = start
+    end_r, end_c = end
+
+    board[end_r][end_c][1] = None
+    board[start_r][start_c][1] = piece
+
+    state["color"] = old_color
 
 def is_winning_move(move, kind):
     end_r = move[1][0]
 
-    if kind == "dark" and end_r == 0:
-        return True
+    if kind == "dark":
+        return end_r == 0
 
-    if kind == "light" and end_r == 7:
-        return True
+    if kind == "light":
+        return end_r == 7
 
     return False
 
@@ -176,25 +183,22 @@ def score_move(move, my_kind):
     start_r, start_c = start
     end_r, end_c = end
 
-    score = 0
-
     if is_winning_move(move, my_kind):
-        score += 10000
+        return 10000
 
     if my_kind == "dark":
         avance = start_r - end_r
-        distance_victoire = end_r
+        progression = 7 - end_r
     else:
         avance = end_r - start_r
-        distance_victoire = 7 - end_r
-
-    score += avance * 12
-    score += (7 - distance_victoire) * 7
-
-    distance_from_center = abs(end_c - 3.5)
-    score += (3.5 - distance_from_center) * 5
+        progression = end_r
 
     distance_move = abs(end_r - start_r) + abs(end_c - start_c)
+
+    score = 0
+    score += avance * 12
+    score += progression * 7
+    score += CENTER_BONUS[end_c]
     score += distance_move
 
     return score
@@ -218,21 +222,18 @@ def score_opponent_danger(opponent_moves, opponent_kind):
     best_danger = 0
 
     for move in opponent_moves:
-        danger = 0
-
         if is_winning_move(move, opponent_kind):
-            danger += 10000
+            return 10000
 
         end_r = move[1][0]
         end_c = move[1][1]
 
         if opponent_kind == "dark":
-            danger += (7 - end_r) * 10
+            danger = (7 - end_r) * 10
         else:
-            danger += end_r * 10
+            danger = end_r * 10
 
-        distance_from_center = abs(end_c - 3.5)
-        danger += (3.5 - distance_from_center) * 3
+        danger += CENTER_BONUS[end_c] // 2
 
         if danger > best_danger:
             best_danger = danger
@@ -241,15 +242,19 @@ def score_opponent_danger(opponent_moves, opponent_kind):
 
 def evaluation(state, joueur, adversaire):
     my_moves = get_possible_moves(state, joueur)
-    opponent_moves = get_possible_moves(state, adversaire)
 
     if not my_moves:
         return -1000
 
+    opponent_moves = get_possible_moves(state, adversaire)
+
     my_score = 0
 
     for move in my_moves:
-        my_score = max(my_score, score_move(move, joueur))
+        score = score_move(move, joueur)
+
+        if score > my_score:
+            my_score = score
 
     opponent_danger = score_opponent_danger(opponent_moves, adversaire)
 
@@ -281,10 +286,10 @@ def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limi
         if is_winning_move(move, joueur):
             score = 100000 + depth
         else:
-            new_state = apply_move_to_copy(state, move)
+            old_color, piece = play_move(state, move)
 
             score = -negamax(
-                new_state,
+                state,
                 depth - 1,
                 -beta,
                 -alpha,
@@ -293,6 +298,8 @@ def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limi
                 start_time,
                 time_limit
             )
+
+            undo_move(state, move, old_color, piece)
 
         if score > meilleur_score:
             meilleur_score = score
@@ -338,10 +345,12 @@ def choose_move(state):
                 return random.choice(studied_moves)
             return random.choice(moves)
 
-        future_state = apply_move_to_copy(state, move)
+        old_color, piece = play_move(state, move)
 
-        if not opponent_can_win_next_turn(future_state, opponent_kind):
+        if not opponent_can_win_next_turn(state, opponent_kind):
             safe_moves.append(move)
+
+        undo_move(state, move, old_color, piece)
 
         studied_moves.append(move)
 
@@ -358,10 +367,10 @@ def choose_move(state):
         if time.time() - start_time >= time_limit:
             break
 
-        new_state = apply_move_to_copy(state, move)
+        old_color, piece = play_move(state, move)
 
         score = -negamax(
-            new_state,
+            state,
             NEGAMAX_DEPTH,
             -float("inf"),
             float("inf"),
@@ -370,6 +379,8 @@ def choose_move(state):
             start_time,
             time_limit
         )
+
+        undo_move(state, move, old_color, piece)
 
         if score > meilleur_score:
             meilleur_score = score
