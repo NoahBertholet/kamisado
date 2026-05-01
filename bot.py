@@ -241,27 +241,38 @@ def score_opponent_danger(opponent_moves, opponent_kind):
     return best_danger
 
 def evaluation(state, joueur, adversaire):
-    my_moves = get_possible_moves(state, joueur)
+    board = state["board"]
+    score = 0
 
-    if not my_moves:
-        return -1000
+    for r in range(8):
+        for c in range(8):
+            piece = board[r][c][1]
 
-    opponent_moves = get_possible_moves(state, adversaire)
+            if piece is None:
+                continue
 
-    my_score = 0
+            piece_color, piece_kind = piece
 
-    for move in my_moves:
-        score = score_move(move, joueur)
+            if piece_kind == joueur:
+                if joueur == "dark":
+                    score += (7 - r) * 15
+                else:
+                    score += r * 15
 
-        if score > my_score:
-            my_score = score
+                score += CENTER_BONUS[c]
 
-    opponent_danger = score_opponent_danger(opponent_moves, adversaire)
+            elif piece_kind == adversaire:
+                if adversaire == "dark":
+                    score -= (7 - r) * 15
+                else:
+                    score -= r * 15
 
-    return my_score - opponent_danger
+                score -= CENTER_BONUS[c]
+
+    return score
 
 def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limit):
-    if time.time() - start_time >= time_limit:
+    if time.perf_counter() - start_time >= time_limit:
         return evaluation(state, joueur, adversaire)
 
     if depth == 0:
@@ -278,7 +289,7 @@ def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limi
     meilleur_score = -float("inf")
 
     for move in moves:
-        if time.time() - start_time >= time_limit:
+        if time.perf_counter() - start_time >= time_limit:
             if meilleur_score == -float("inf"):
                 return evaluation(state, joueur, adversaire)
             return meilleur_score
@@ -313,7 +324,7 @@ def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limi
     return meilleur_score
 
 def choose_move(state):
-    start_time = time.time()
+    start_time = time.perf_counter()
     time_limit = TIME_LIMIT
 
     my_kind = get_my_kind(state)
@@ -338,7 +349,7 @@ def choose_move(state):
     studied_moves = []
 
     for move in moves:
-        if time.time() - start_time >= time_limit:
+        if time.perf_counter() - start_time >= time_limit:
             if safe_moves:
                 return random.choice(safe_moves)
             if studied_moves:
@@ -360,36 +371,50 @@ def choose_move(state):
     moves = sort_moves(moves, my_kind)
     moves = moves[:MAX_ROOT_MOVES]
 
-    meilleur_score = -float("inf")
-    meilleurs_coups = []
+    best_move = None
+    best_score = -float("inf")
 
-    for move in moves:
-        if time.time() - start_time >= time_limit:
+    depth = 1
+
+    while time.perf_counter() - start_time < time_limit:
+        current_best_move = None
+        current_best_score = -float("inf")
+        completed_depth = True
+
+        for move in moves:
+            if time.perf_counter() - start_time >= time_limit:
+                completed_depth = False
+                break
+
+            old_color, piece = play_move(state, move)
+
+            score = -negamax(
+                state,
+                depth,
+                -float("inf"),
+                float("inf"),
+                opponent_kind,
+                my_kind,
+                start_time,
+                time_limit
+            )
+
+            undo_move(state, move, old_color, piece)
+
+            if score > current_best_score:
+                current_best_score = score
+                current_best_move = move
+
+        if completed_depth and current_best_move is not None:
+            best_move = current_best_move
+            best_score = current_best_score
+        else:
             break
 
-        old_color, piece = play_move(state, move)
+        depth += 1
 
-        score = -negamax(
-            state,
-            NEGAMAX_DEPTH,
-            -float("inf"),
-            float("inf"),
-            opponent_kind,
-            my_kind,
-            start_time,
-            time_limit
-        )
-
-        undo_move(state, move, old_color, piece)
-
-        if score > meilleur_score:
-            meilleur_score = score
-            meilleurs_coups = [move]
-        elif score == meilleur_score:
-            meilleurs_coups.append(move)
-
-    if meilleurs_coups:
-        return random.choice(meilleurs_coups)
+    if best_move is not None:
+        return best_move
 
     return moves[0]
 
