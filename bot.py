@@ -8,7 +8,7 @@ import time
 
 # constantes
 BOT_PORT = 8888
-BOT_NAME = "BERTHOFUSEE"
+BOT_NAME = "ancienne"
 SERVER_HOST = "LOCALHOST"
 SERVER_PORT = 3000
 TIME_LIMIT = 2.8
@@ -497,7 +497,7 @@ def build_subscribe_message():
         "request": "subscribe",
         "port": BOT_PORT,
         "name": BOT_NAME,
-        "matricules": ["24371", "23032"]
+        "matricules": ["17866", "66178"]
     }
 
 def subscribe_to_server():
