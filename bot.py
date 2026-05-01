@@ -253,20 +253,60 @@ def evaluation(state, joueur, adversaire):
             piece_color, piece_kind = piece
 
             if piece_kind == joueur:
-                if joueur == "dark":
-                    score += (7 - r) * 15
-                else:
-                    score += r * 15
-
-                score += CENTER_BONUS[c]
-
+                signe = 1
+                kind = joueur
             elif piece_kind == adversaire:
-                if adversaire == "dark":
-                    score -= (7 - r) * 15
-                else:
-                    score -= r * 15
+                signe = -1
+                kind = adversaire
+            else:
+                continue
 
-                score -= CENTER_BONUS[c]
+            if kind == "dark":
+                progression = 7 - r
+                distance_victoire = r
+                direction = -1
+            else:
+                progression = r
+                distance_victoire = 7 - r
+                direction = 1
+
+            piece_score = 0
+
+            # Avancer vers la ligne de victoire
+            piece_score += progression * 18
+
+            # Bonus centre
+            piece_score += CENTER_BONUS[c]
+
+            # Très gros bonus si proche de gagner
+            if distance_victoire == 1:
+                piece_score += 80
+            elif distance_victoire == 2:
+                piece_score += 35
+
+            # Regarde si la colonne devant est libre
+            free_forward = 0
+            nr = r + direction
+
+            while 0 <= nr < 8:
+                if board[nr][c][1] is not None:
+                    break
+
+                free_forward += 1
+                nr += direction
+
+            piece_score += free_forward * 4
+
+            # Bonus si les diagonales immédiates sont libres
+            for dc in [-1, 1]:
+                nr = r + direction
+                nc = c + dc
+
+                if 0 <= nr < 8 and 0 <= nc < 8:
+                    if board[nr][nc][1] is None:
+                        piece_score += 6
+
+            score += signe * piece_score
 
     return score
 
