@@ -410,17 +410,30 @@ def choose_move(state):
     moves = moves[:MAX_ROOT_MOVES]
 
     best_move = None
-    best_score = -float("inf")
-
     depth = 1
+    previous_depth_time = None
 
-    while time.perf_counter() - start_time < time_limit:
+    while True:
+        elapsed = time.perf_counter() - start_time
+        remaining_time = time_limit - elapsed
+
+        if remaining_time <= SAFETY_MARGIN:
+            break
+
+        if previous_depth_time is not None:
+            estimated_next_depth_time = previous_depth_time * MAX_NEGAMAX_MOVES
+
+            if estimated_next_depth_time > remaining_time - SAFETY_MARGIN:
+                break
+
+        depth_start_time = time.perf_counter()
+
         current_best_move = None
         current_best_score = -float("inf")
         completed_depth = True
 
         for move in moves:
-            if time.perf_counter() - start_time >= time_limit:
+            if time.perf_counter() - start_time >= time_limit - SAFETY_MARGIN:
                 completed_depth = False
                 break
 
@@ -434,7 +447,7 @@ def choose_move(state):
                 opponent_kind,
                 my_kind,
                 start_time,
-                time_limit
+                time_limit - SAFETY_MARGIN
             )
 
             undo_move(state, move, old_color, piece)
@@ -443,16 +456,16 @@ def choose_move(state):
                 current_best_score = score
                 current_best_move = move
 
+        depth_time = time.perf_counter() - depth_start_time
+
         if completed_depth and current_best_move is not None:
             best_move = current_best_move
-            best_score = current_best_score
+            previous_depth_time = depth_time
         else:
             break
 
         depth += 1
 
-    print("profondeur atteinte :", depth - 1)
-    print("profondeur réelle :", depth)
     if best_move is not None:
         return best_move
 
