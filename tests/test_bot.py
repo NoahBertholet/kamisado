@@ -113,7 +113,7 @@ def test_build_subscribe_message():
     assert message["request"] == "subscribe"
     assert message["port"] == BOT_PORT
     assert message["name"] == BOT_NAME
-    assert message["matricules"] == ["17866", "66178"]
+    assert message["matricules"] == ["24371", "23032"]
 
 
 def test_subscribe_to_server(monkeypatch):
