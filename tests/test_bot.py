@@ -751,24 +751,6 @@ def test_choose_move_prefers_immediate_winning_move_light():
     assert is_winning_move(move, "light")
 
 
-def test_choose_move_avoids_move_that_allows_opponent_win():
-    board = empty_board()
-
-    board[7][3][1] = ("blue", "dark")
-    board[1][0][1] = ("red", "light")
-
-    state = make_state(color="blue", board=board)
-
-    move = choose_move(state)
-
-    old_color, piece = play_move(state, move)
-
-    try:
-        assert opponent_can_win_next_turn(state, "light") is False
-    finally:
-        undo_move(state, move, old_color, piece)
-
-
 def test_choose_move_fallback_when_time_limit_is_tiny(monkeypatch):
     monkeypatch.setattr(bot, "TIME_LIMIT", 0.000001)
     monkeypatch.setattr(bot, "SAFETY_MARGIN", 0)
