@@ -8,7 +8,7 @@ import time
 
 # constantes
 BOT_PORT = 8889
-BOT_NAME = "ancienne"
+BOT_NAME = "BERTHOLET"
 SERVER_HOST = "LOCALHOST"
 SERVER_PORT = 3000
 TIME_LIMIT = 2.8
