@@ -14,7 +14,7 @@ SERVER_PORT = 3000
 TIME_LIMIT = 2.8
 MAX_ROOT_MOVES = 10
 MAX_NEGAMAX_MOVES = 8
-SAFETY_MARGIN = 0.15
+SAFETY_MARGIN = 0.05
 _deadline = None
 
 DIRECTIONS = {
@@ -312,7 +312,7 @@ def evaluation(state, joueur, adversaire):
     joueur_moves = len(get_possible_moves(state, joueur))
     adversaire_moves = len(get_possible_moves(state, adversaire))
 
-    score += (joueur_moves - adversaire_moves) * 2
+    score += (joueur_moves - adversaire_moves) * 5
 
     return score
 
