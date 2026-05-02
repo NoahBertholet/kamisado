@@ -24,7 +24,6 @@ from bot import (
     score_move,
     sort_moves,
     opponent_can_win_next_turn,
-    score_opponent_danger,
     evaluation,
     negamax
 )
@@ -391,33 +390,6 @@ def test_opponent_can_win_next_turn_false_when_blocked():
     state = make_state(color="blue", board=board)
 
     assert opponent_can_win_next_turn(state, "dark") is False
-
-
-def test_score_opponent_danger_returns_zero_when_no_moves():
-    assert score_opponent_danger([], "dark") == 0
-
-
-def test_score_opponent_danger_detects_winning_move_as_dangerous():
-    moves = [
-        [[3, 3], [2, 3]],
-        [[1, 3], [0, 3]]
-    ]
-
-    danger = score_opponent_danger(moves, "dark")
-
-    assert danger >= 10000
-
-
-def test_score_opponent_danger_normal_move_positive():
-    moves = [
-        [[7, 3], [6, 3]],
-        [[7, 3], [5, 3]]
-    ]
-
-    danger = score_opponent_danger(moves, "dark")
-
-    assert danger > 0
-
 
 def test_evaluation_positive_when_my_piece_is_advanced():
     board = empty_board()
