@@ -16,6 +16,9 @@ MAX_ROOT_MOVES = 10
 MAX_NEGAMAX_MOVES = 8
 SAFETY_MARGIN = 0.05
 _deadline = None
+TRANSPOSITION_TABLE = {}
+CACHE_MAX_SIZE = 100000
+
 
 DIRECTIONS = {
     "dark": [(-1, 0), (-1, -1), (-1, 1)],
@@ -291,11 +294,42 @@ def evaluation(state, joueur, adversaire):
 
     return score
 
+def serialize_state(state, joueur):
+    board = state["board"]
+
+    pieces = tuple(
+        tuple(board[r][c][1] for c in range(8))
+        for r in range(8)
+    )
+
+    return (pieces, state["color"], joueur)
+
 def negamax(state, depth, alpha, beta, joueur, adversaire):
     check_timeout()
 
+    alpha_original = alpha
+    beta_original = beta
+
+    key = (serialize_state(state, joueur), depth)
+
+    if key in TRANSPOSITION_TABLE:
+        cached_depth, cached_score, cached_flag = TRANSPOSITION_TABLE[key]
+
+        if cached_depth >= depth:
+            if cached_flag == "EXACT":
+                return cached_score
+            elif cached_flag == "LOWER":
+                alpha = max(alpha, cached_score)
+            elif cached_flag == "UPPER":
+                beta = min(beta, cached_score)
+
+            if alpha >= beta:
+                return cached_score
+
     if depth == 0:
-        return evaluation(state, joueur, adversaire)
+        score = evaluation(state, joueur, adversaire)
+        TRANSPOSITION_TABLE[key] = (depth, score, "EXACT")
+        return score
 
     moves = get_possible_moves(state, joueur)
 
@@ -336,13 +370,27 @@ def negamax(state, depth, alpha, beta, joueur, adversaire):
         if alpha >= beta:
             break
 
+    if meilleur_score <= alpha_original:
+        flag = "UPPER"
+    elif meilleur_score >= beta_original:
+        flag = "LOWER"
+    else:
+        flag = "EXACT"
+
+    if len(TRANSPOSITION_TABLE) > CACHE_MAX_SIZE:
+        TRANSPOSITION_TABLE.clear()
+
+    TRANSPOSITION_TABLE[key] = (depth, meilleur_score, flag)
+
     return meilleur_score
 
 def choose_move(state):
-    global _deadline
+    global _deadline, TRANSPOSITION_TABLE
 
     start_time = time.perf_counter()
     _deadline = start_time + TIME_LIMIT - SAFETY_MARGIN
+    if len(TRANSPOSITION_TABLE) > CACHE_MAX_SIZE:
+        TRANSPOSITION_TABLE.clear()
 
     my_kind = get_my_kind(state)
 
