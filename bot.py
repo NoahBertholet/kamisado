@@ -14,6 +14,8 @@ SERVER_PORT = 3000
 TIME_LIMIT = 2.8
 MAX_ROOT_MOVES = 10
 MAX_NEGAMAX_MOVES = 8
+SAFETY_MARGIN = 0.05
+_deadline = None
 
 DIRECTIONS = {
     "dark": [(-1, 0), (-1, -1), (-1, 1)],
@@ -55,6 +57,13 @@ funnylines = [
     "Tout est calculé... ou presque"
 ]
 
+class TimeoutException(Exception):
+    pass
+
+def check_timeout():
+    if _deadline is not None and time.perf_counter() >= _deadline:
+        raise TimeoutException()
+    
 def send_json(sock, message):
     json_string = json.dumps(message)
     json_bytes = json_string.encode("utf-8")
@@ -270,20 +279,14 @@ def evaluation(state, joueur, adversaire):
                 direction = 1
 
             piece_score = 0
-
-            # Avancer vers la ligne de victoire
             piece_score += progression * 18
-
-            # Bonus centre
             piece_score += CENTER_BONUS[c]
 
-            # Très gros bonus si proche de gagner
             if distance_victoire == 1:
                 piece_score += 80
             elif distance_victoire == 2:
                 piece_score += 35
 
-            # Regarde si la colonne devant est libre
             free_forward = 0
             nr = r + direction
 
@@ -296,7 +299,6 @@ def evaluation(state, joueur, adversaire):
 
             piece_score += free_forward * 4
 
-            # Bonus si les diagonales immédiates sont libres
             for dc in [-1, 1]:
                 nr = r + direction
                 nc = c + dc
@@ -307,11 +309,15 @@ def evaluation(state, joueur, adversaire):
 
             score += signe * piece_score
 
+    joueur_moves = len(get_possible_moves(state, joueur))
+    adversaire_moves = len(get_possible_moves(state, adversaire))
+
+    score += (joueur_moves - adversaire_moves) * 5
+
     return score
 
-def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limit):
-    if time.perf_counter() - start_time >= time_limit:
-        return evaluation(state, joueur, adversaire)
+def negamax(state, depth, alpha, beta, joueur, adversaire):
+    check_timeout()
 
     if depth == 0:
         return evaluation(state, joueur, adversaire)
@@ -327,28 +333,24 @@ def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limi
     meilleur_score = -float("inf")
 
     for move in moves:
-        if time.perf_counter() - start_time >= time_limit:
-            if meilleur_score == -float("inf"):
-                return evaluation(state, joueur, adversaire)
-            return meilleur_score
+        check_timeout()
 
         if is_winning_move(move, joueur):
             score = 100000 + depth
         else:
             old_color, piece = play_move(state, move)
 
-            score = -negamax(
-                state,
-                depth - 1,
-                -beta,
-                -alpha,
-                adversaire,
-                joueur,
-                start_time,
-                time_limit
-            )
-
-            undo_move(state, move, old_color, piece)
+            try:
+                score = -negamax(
+                    state,
+                    depth - 1,
+                    -beta,
+                    -alpha,
+                    adversaire,
+                    joueur
+                )
+            finally:
+                undo_move(state, move, old_color, piece)
 
         if score > meilleur_score:
             meilleur_score = score
@@ -362,12 +364,15 @@ def negamax(state, depth, alpha, beta, joueur, adversaire, start_time, time_limi
     return meilleur_score
 
 def choose_move(state):
+    global _deadline
+
     start_time = time.perf_counter()
-    time_limit = TIME_LIMIT
+    _deadline = start_time + TIME_LIMIT - SAFETY_MARGIN
 
     my_kind = get_my_kind(state)
 
     if my_kind is None:
+        _deadline = None
         return None
 
     opponent_kind = "light" if my_kind == "dark" else "dark"
@@ -375,33 +380,44 @@ def choose_move(state):
     moves = get_possible_moves(state, my_kind)
 
     if not moves:
+        _deadline = None
         return None
 
     moves = sort_moves(moves, my_kind)
 
     for move in moves:
         if is_winning_move(move, my_kind):
+            _deadline = None
             return move
 
     safe_moves = []
     studied_moves = []
 
-    for move in moves:
-        if time.perf_counter() - start_time >= time_limit:
-            if safe_moves:
-                return random.choice(safe_moves)
-            if studied_moves:
-                return random.choice(studied_moves)
-            return random.choice(moves)
+    try:
+        for move in moves:
+            check_timeout()
 
-        old_color, piece = play_move(state, move)
+            old_color, piece = play_move(state, move)
 
-        if not opponent_can_win_next_turn(state, opponent_kind):
-            safe_moves.append(move)
+            try:
+                if not opponent_can_win_next_turn(state, opponent_kind):
+                    safe_moves.append(move)
+            finally:
+                undo_move(state, move, old_color, piece)
 
-        undo_move(state, move, old_color, piece)
+            studied_moves.append(move)
 
-        studied_moves.append(move)
+    except TimeoutException:
+        if safe_moves:
+            _deadline = None
+            return random.choice(safe_moves)
+
+        if studied_moves:
+            _deadline = None
+            return random.choice(studied_moves)
+
+        _deadline = None
+        return random.choice(moves)
 
     if safe_moves:
         moves = safe_moves
@@ -410,49 +426,48 @@ def choose_move(state):
     moves = moves[:MAX_ROOT_MOVES]
 
     best_move = None
-    best_score = -float("inf")
-
     depth = 1
 
-    while time.perf_counter() - start_time < time_limit:
+    while True:
         current_best_move = None
         current_best_score = -float("inf")
         completed_depth = True
 
-        for move in moves:
-            if time.perf_counter() - start_time >= time_limit:
-                completed_depth = False
-                break
+        try:
+            for move in moves:
+                check_timeout()
 
-            old_color, piece = play_move(state, move)
+                old_color, piece = play_move(state, move)
 
-            score = -negamax(
-                state,
-                depth,
-                -float("inf"),
-                float("inf"),
-                opponent_kind,
-                my_kind,
-                start_time,
-                time_limit
-            )
+                try:
+                    score = -negamax(
+                        state,
+                        depth,
+                        -float("inf"),
+                        float("inf"),
+                        opponent_kind,
+                        my_kind
+                    )
+                finally:
+                    undo_move(state, move, old_color, piece)
 
-            undo_move(state, move, old_color, piece)
+                if score > current_best_score:
+                    current_best_score = score
+                    current_best_move = move
 
-            if score > current_best_score:
-                current_best_score = score
-                current_best_move = move
+        except TimeoutException:
+            completed_depth = False
 
         if completed_depth and current_best_move is not None:
             best_move = current_best_move
-            best_score = current_best_score
+            depth += 1
         else:
             break
 
-        depth += 1
+    _deadline = None
 
     print("profondeur atteinte :", depth - 1)
-    print("profondeur réelle :", depth)
+
     if best_move is not None:
         return best_move
 
