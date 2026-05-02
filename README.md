@@ -8,72 +8,119 @@
 
 ## 🧠 Stratégie de l’IA
 
-Notre bot utilise une stratégie basée sur des règles simples du jeu Kamisado.  
+Notre bot utilise une approche avancée combinant heuristiques et recherche en profondeur.
 
-1. **Recherche d’un coup gagnant**  
-   Le bot commence par vérifier si un coup permet de gagner immédiatement la partie.  
-   Si c’est le cas, ce coup est joué en priorité.
+### 1. Détection des coups gagnants immédiats
+Le bot vérifie d’abord si un coup permet de gagner immédiatement.  
+Si c’est le cas, il est joué sans réflexion supplémentaire.
 
-2. **Évitement des victoires adverses**  
-   Pour chaque coup possible, le bot simule l’état du plateau après ce coup.  
-   Il regarde ensuite si l’adversaire pourrait gagner directement au tour suivant.  
-   Si un coup donne une victoire immédiate à l’adversaire, il est évité.
+---
 
-3. **Évaluation du déplacement**  
-   Les coups restants reçoivent un score.  
-   Le bot favorise les coups qui font avancer le pion vers la ligne de victoire, sans donner trop d’importance aux déplacements trop agressifs.
+### 2. Évitement des défaites immédiates
+Le bot simule chaque coup possible et vérifie si l’adversaire peut gagner au tour suivant.  
+Les coups dangereux sont éliminés si possible.
 
-4. **Positionnement sur le plateau**  
-   Le bot donne aussi un bonus aux coups qui rapprochent le pion du centre du plateau.  
-   Une position centrale offre généralement plus de possibilités de déplacement.
+---
 
-5. **Analyse de la couleur imposée**  
-   Dans Kamisado, la case d’arrivée détermine la couleur du pion que l’adversaire devra jouer.  
-   Le bot prend donc en compte le nombre de coups que cette couleur donnera à l’adversaire.  
-   Si l’adversaire n’a aucun coup possible, le coup reçoit un gros bonus.  
-   Si l’adversaire a beaucoup de possibilités, le coup est pénalisé.
+### 3. Tri heuristique des coups
+Avant la recherche, les coups sont triés pour améliorer l’efficacité :
 
-6. **Choix final**  
-   Le bot choisit le coup avec le meilleur score.  
-   Si plusieurs coups ont le même score, il en choisit un aléatoirement afin de garder une certaine variabilité.
+- progression vers la ligne d’arrivée  
+- distance parcourue  
+- position centrale sur le plateau  
+- potentiel de victoire rapide  
+
+Seuls les meilleurs coups sont conservés pour limiter le temps de calcul.
+
+---
+
+### 4. Recherche Negamax avec élagage alpha-bêta
+Le bot utilise l’algorithme **Negamax** avec **alpha-bêta pruning** :
+
+- exploration des coups futurs
+- réduction drastique du nombre de positions évaluées
+- inversion des scores pour gérer les deux joueurs
+
+Cela permet d’aller plus profond dans l’arbre de recherche.
+
+---
+
+### 5. Iterative Deepening (approfondissement progressif)
+La recherche se fait par profondeur croissante :
+
+- profondeur 1 → 2 → 3 → ...
+- à chaque étape, le meilleur coup est sauvegardé
+- si le temps expire, le bot retourne le meilleur coup connu
+
+---
+
+### 6. Table de transposition (cache)
+Le bot mémorise les positions déjà évaluées :
+
+- évite de recalculer des états identiques
+- améliore fortement les performances
+- limitée à une taille maximale (`CACHE_MAX_SIZE`)
+
+---
+
+### 7. Fonction d’évaluation avancée
+
+L’évaluation d’une position prend en compte :
+
+- progression vers la victoire  
+- distance restante  
+- position centrale  
+- liberté de mouvement (cases libres devant)  
+- possibilités de déplacement diagonales  
+- mobilité globale (nombre de coups possibles)  
 
 ---
 
 ## 🧰 Technologies et bibliothèques utilisées
 
-Notre projet utilise plusieurs bibliothèques Python essentielles :
-
-- `socket` : communication avec le serveur du jeu  
-- `json` : formatage des messages échangés  
-- `struct` : gestion de la taille des données envoyées  
-- `threading` : gestion des tâches en parallèle  
-- `random` : sélection aléatoire parmi plusieurs coups équivalents  
-- `copy` : création d’une copie du plateau pour simuler les coups  
-- `time` : gestion du temps afin de ne pas dépasser les 3 secondes  
+- `socket` : communication avec le serveur  
+- `json` : sérialisation des messages  
+- `struct` : gestion du protocole réseau  
+- `threading` : exécution du serveur du bot  
+- `random` : variabilité des messages et fallback  
+- `time` : gestion stricte du temps  
 
 ---
 
 ## ⏱️ Gestion du temps
 
-Le module `time` est utilisé pour contrôler le temps de réflexion du bot.
+Le bot dispose d’un temps limité pour jouer (`TIME_LIMIT = 2.8s`).
 
 ### Fonctionnement :
 
-- Au début du calcul d’un coup, on enregistre le temps de départ  
-- Pendant l’analyse, on vérifie régulièrement le temps écoulé  
-- Si la limite de temps est atteinte :
-  - le bot retourne le meilleur coup trouvé jusqu’à présent  
-  - ou un coup déjà analysé  
-  - ou en dernier recours, un coup aléatoire  
+- un **deadline global** est défini au début du calcul  
+- des vérifications (`check_timeout`) sont faites dans toute la recherche  
+- si le temps est dépassé :
+  - arrêt immédiat de la recherche
+  - retour du meilleur coup trouvé
 
-Cela garantit que le bot respecte toujours le temps imposé par le serveur.
+Une **marge de sécurité** (`SAFETY_MARGIN`) est appliquée pour éviter tout dépassement.
 
 ---
 
-## ⚙️ Améliorations possibles
+## ⚙️ Optimisations implémentées
 
-- Amélioration de l’évaluation des positions  
-- Meilleure anticipation des blocages futurs  
-- Optimisation des performances  
+- Limitation du nombre de coups explorés :
+  - `MAX_ROOT_MOVES` (racine)
+  - `MAX_NEGAMAX_MOVES` (recherche)
+- Tri heuristique des coups
+- Alpha-bêta pruning
+- Table de transposition
+- Iterative deepening
+
+---
+
+## 💡 Améliorations possibles
+
+- Meilleur ordering des coups (killer moves, history heuristic)
+- Amélioration de la fonction d’évaluation
+- Gestion plus fine du temps (estimation dynamique de profondeur)
+- Ajout d’une détection de zugzwang / blocage
+- Optimisation de la table de transposition (LRU au lieu de clear)
 
 ---
