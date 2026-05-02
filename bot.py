@@ -7,7 +7,7 @@ import random
 import time
 
 # constantes
-BOT_PORT = 8888
+BOT_PORT = 8889
 BOT_NAME = "ancienne"
 SERVER_HOST = "LOCALHOST"
 SERVER_PORT = 3000
