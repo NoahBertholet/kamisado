@@ -308,7 +308,7 @@ def serialize_state(state, joueur):
         for r in range(8)
     )
 
-    return (pieces, state["color"], joueur)
+    return (pieces, make_hashable(state["color"]), joueur)
 
 def negamax(state, depth, alpha, beta, joueur, adversaire):
     check_timeout()
