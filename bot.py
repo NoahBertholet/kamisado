@@ -222,31 +222,6 @@ def opponent_can_win_next_turn(state, opponent_kind):
 
     return False
 
-def score_opponent_danger(opponent_moves, opponent_kind):
-    if not opponent_moves:
-        return 0
-
-    best_danger = 0
-
-    for move in opponent_moves:
-        if is_winning_move(move, opponent_kind):
-            return 10000
-
-        end_r = move[1][0]
-        end_c = move[1][1]
-
-        if opponent_kind == "dark":
-            danger = (7 - end_r) * 10
-        else:
-            danger = end_r * 10
-
-        danger += CENTER_BONUS[end_c] // 2
-
-        if danger > best_danger:
-            best_danger = danger
-
-    return best_danger
-
 def evaluation(state, joueur, adversaire):
     board = state["board"]
     score = 0
@@ -410,11 +385,11 @@ def choose_move(state):
     except TimeoutException:
         if safe_moves:
             _deadline = None
-            return random.choice(safe_moves)
+            return sort_moves(safe_moves, my_kind)[0]
 
         if studied_moves:
             _deadline = None
-            return random.choice(studied_moves)
+            return sort_moves(studied_moves, my_kind)[0]
 
         _deadline = None
         return random.choice(moves)
