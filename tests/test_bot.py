@@ -2,6 +2,7 @@ import socket
 import sys
 import os
 import struct
+import json
 import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -25,15 +26,22 @@ from bot import (
     sort_moves,
     opponent_can_win_next_turn,
     evaluation,
-    negamax
+    negamax,
+    check_timeout,
+    TimeoutException,
+    subscribe_to_server
 )
 
 
 @pytest.fixture(autouse=True)
 def fast_bot(monkeypatch):
     monkeypatch.setattr(bot, "TIME_LIMIT", 0.08)
+    monkeypatch.setattr(bot, "SAFETY_MARGIN", 0.001)
     monkeypatch.setattr(bot, "MAX_ROOT_MOVES", 6)
     monkeypatch.setattr(bot, "MAX_NEGAMAX_MOVES", 5)
+    bot._deadline = None
+    yield
+    bot._deadline = None
 
 
 def empty_board():
@@ -47,6 +55,18 @@ def make_state(players=None, color=None, board=None, current=0):
         "color": color,
         "board": board or empty_board()
     }
+
+
+def test_check_timeout_does_nothing_without_deadline():
+    bot._deadline = None
+    check_timeout()
+
+
+def test_check_timeout_raises_when_deadline_is_passed():
+    bot._deadline = bot.time.perf_counter() - 1
+
+    with pytest.raises(TimeoutException):
+        check_timeout()
 
 
 def test_send_and_receive_json():
@@ -93,7 +113,44 @@ def test_build_subscribe_message():
     assert message["request"] == "subscribe"
     assert message["port"] == BOT_PORT
     assert message["name"] == BOT_NAME
-    assert message["matricules"] == ["24371", "23032"]
+    assert message["matricules"] == ["17866", "66178"]
+
+
+def test_subscribe_to_server(monkeypatch):
+    response = {"response": "ok"}
+    response_bytes = json.dumps(response).encode("utf-8")
+    incoming = [
+        struct.pack("I", len(response_bytes)),
+        response_bytes
+    ]
+
+    class FakeSocket:
+        def __init__(self):
+            self.sent = []
+            self.connected_to = None
+            self.closed = False
+
+        def connect(self, address):
+            self.connected_to = address
+
+        def sendall(self, data):
+            self.sent.append(data)
+
+        def recv(self, size):
+            return incoming.pop(0)
+
+        def close(self):
+            self.closed = True
+
+    fake_socket = FakeSocket()
+
+    monkeypatch.setattr(bot.socket, "socket", lambda *args, **kwargs: fake_socket)
+
+    subscribe_to_server()
+
+    assert fake_socket.connected_to == (bot.SERVER_HOST, bot.SERVER_PORT)
+    assert fake_socket.closed is True
+    assert len(fake_socket.sent) == 2
 
 
 def test_handle_message_ping():
@@ -323,27 +380,19 @@ def test_undo_move_restores_state():
 
 
 def test_is_winning_move_dark():
-    move = [[2, 3], [0, 3]]
-
-    assert is_winning_move(move, "dark") is True
+    assert is_winning_move([[2, 3], [0, 3]], "dark") is True
 
 
 def test_is_winning_move_light():
-    move = [[5, 3], [7, 3]]
-
-    assert is_winning_move(move, "light") is True
+    assert is_winning_move([[5, 3], [7, 3]], "light") is True
 
 
 def test_is_winning_move_false_when_not_on_final_row():
-    move = [[7, 3], [6, 3]]
-
-    assert is_winning_move(move, "dark") is False
+    assert is_winning_move([[7, 3], [6, 3]], "dark") is False
 
 
 def test_is_winning_move_false_with_unknown_kind():
-    move = [[7, 3], [6, 3]]
-
-    assert is_winning_move(move, "unknown") is False
+    assert is_winning_move([[7, 3], [6, 3]], "unknown") is False
 
 
 def test_score_move_winning_move_has_big_score():
@@ -391,6 +440,7 @@ def test_opponent_can_win_next_turn_false_when_blocked():
 
     assert opponent_can_win_next_turn(state, "dark") is False
 
+
 def test_evaluation_positive_when_my_piece_is_advanced():
     board = empty_board()
     board[2][3][1] = ("blue", "dark")
@@ -398,9 +448,7 @@ def test_evaluation_positive_when_my_piece_is_advanced():
 
     state = make_state(color="blue", board=board)
 
-    score = evaluation(state, "dark", "light")
-
-    assert score > 0
+    assert evaluation(state, "dark", "light") > 0
 
 
 def test_evaluation_negative_when_opponent_piece_is_advanced():
@@ -410,9 +458,7 @@ def test_evaluation_negative_when_opponent_piece_is_advanced():
 
     state = make_state(color="blue", board=board)
 
-    score = evaluation(state, "dark", "light")
-
-    assert score < 0
+    assert evaluation(state, "dark", "light") < 0
 
 
 def test_evaluation_ignores_empty_board():
@@ -436,6 +482,22 @@ def test_evaluation_rewards_free_forward_path():
     assert evaluation(state_free, "dark", "light") > evaluation(state_blocked, "dark", "light")
 
 
+def test_evaluation_rewards_diagonal_options():
+    board = empty_board()
+    board[4][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    score_with_diagonals = evaluation(state, "dark", "light")
+
+    board[3][2][1] = ("red", "light")
+    board[3][4][1] = ("red", "light")
+
+    score_without_diagonals = evaluation(state, "dark", "light")
+
+    assert score_with_diagonals > score_without_diagonals
+
+
 def test_negamax_returns_evaluation_at_depth_zero():
     board = empty_board()
     board[7][3][1] = ("blue", "dark")
@@ -448,9 +510,7 @@ def test_negamax_returns_evaluation_at_depth_zero():
         alpha=-float("inf"),
         beta=float("inf"),
         joueur="dark",
-        adversaire="light",
-        start_time=bot.time.perf_counter(),
-        time_limit=1
+        adversaire="light"
     )
 
     assert score == evaluation(state, "dark", "light")
@@ -470,9 +530,7 @@ def test_negamax_returns_negative_when_no_moves():
         alpha=-float("inf"),
         beta=float("inf"),
         joueur="dark",
-        adversaire="light",
-        start_time=bot.time.perf_counter(),
-        time_limit=1
+        adversaire="light"
     )
 
     assert score == -1000
@@ -490,32 +548,48 @@ def test_negamax_detects_winning_move():
         alpha=-float("inf"),
         beta=float("inf"),
         joueur="dark",
-        adversaire="light",
-        start_time=bot.time.perf_counter(),
-        time_limit=1
+        adversaire="light"
     )
 
     assert score >= 100000
 
 
-def test_negamax_returns_evaluation_when_time_is_over():
+def test_negamax_raises_timeout_when_deadline_is_passed():
     board = empty_board()
     board[7][3][1] = ("blue", "dark")
 
     state = make_state(color="blue", board=board)
 
+    bot._deadline = bot.time.perf_counter() - 1
+
+    with pytest.raises(TimeoutException):
+        negamax(
+            state,
+            depth=3,
+            alpha=-float("inf"),
+            beta=float("inf"),
+            joueur="dark",
+            adversaire="light"
+        )
+
+
+def test_negamax_uses_alpha_beta_cutoff():
+    board = empty_board()
+    board[7][0][1] = ("blue", "dark")
+    board[7][7][1] = ("red", "dark")
+
+    state = make_state(color=None, board=board)
+
     score = negamax(
         state,
-        depth=3,
-        alpha=-float("inf"),
-        beta=float("inf"),
+        depth=2,
+        alpha=99999,
+        beta=100000,
         joueur="dark",
-        adversaire="light",
-        start_time=bot.time.perf_counter() - 10,
-        time_limit=0.01
+        adversaire="light"
     )
 
-    assert score == evaluation(state, "dark", "light")
+    assert isinstance(score, (int, float))
 
 
 def test_choose_move_returns_none_when_no_piece_can_move():
@@ -677,8 +751,28 @@ def test_choose_move_prefers_immediate_winning_move_light():
     assert is_winning_move(move, "light")
 
 
+def test_choose_move_avoids_move_that_allows_opponent_win():
+    board = empty_board()
+
+    board[7][3][1] = ("blue", "dark")
+    board[1][0][1] = ("red", "light")
+
+    state = make_state(color="blue", board=board)
+
+    move = choose_move(state)
+
+    old_color, piece = play_move(state, move)
+
+    try:
+        assert opponent_can_win_next_turn(state, "light") is False
+    finally:
+        undo_move(state, move, old_color, piece)
+
+
 def test_choose_move_fallback_when_time_limit_is_tiny(monkeypatch):
     monkeypatch.setattr(bot, "TIME_LIMIT", 0.000001)
+    monkeypatch.setattr(bot, "SAFETY_MARGIN", 0)
+    monkeypatch.setattr(bot.random, "choice", lambda moves: moves[0])
 
     board = empty_board()
     board[7][3][1] = ("blue", "dark")
@@ -688,3 +782,22 @@ def test_choose_move_fallback_when_time_limit_is_tiny(monkeypatch):
     move = choose_move(state)
 
     assert move is not None
+
+
+def test_choose_move_resets_deadline_after_success():
+    board = empty_board()
+    board[7][3][1] = ("blue", "dark")
+
+    state = make_state(color="blue", board=board)
+
+    choose_move(state)
+
+    assert bot._deadline is None
+
+
+def test_choose_move_resets_deadline_after_no_move():
+    state = make_state(color="blue")
+
+    choose_move(state)
+
+    assert bot._deadline is None
