@@ -295,10 +295,15 @@ def evaluation(state, joueur, adversaire):
     return score
 
 def serialize_state(state, joueur):
+    def make_hashable(x):
+        if isinstance(x, list):
+            return tuple(make_hashable(e) for e in x)
+        return x
+
     board = state["board"]
 
     pieces = tuple(
-        tuple(board[r][c][1] for c in range(8))
+        tuple(make_hashable(board[r][c][1]) for c in range(8))
         for r in range(8)
     )
 
