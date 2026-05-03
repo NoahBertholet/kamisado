@@ -230,6 +230,32 @@ def opponent_can_win_next_turn(state, opponent_kind):
 
     return False
 
+def count_blocked_columns(board, kind):
+    
+    directions = DIRECTIONS[kind]
+    blocked = 0
+ 
+    for r in range(8):
+        for c in range(8):
+            piece = board[r][c][1]
+            if piece is None:
+                continue 
+            _, piece_kind = piece
+            if piece_kind != kind:
+                continue
+ 
+            has_move = False
+            for dr, dc in directions:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < 8 and 0 <= nc < 8 and board[nr][nc][1] is None:
+                    has_move = True
+                    break
+ 
+            if not has_move:
+                blocked += 1
+ 
+    return blocked
+
 def evaluation(state, joueur, adversaire):
     board = state["board"]
     score = 0
@@ -296,6 +322,10 @@ def evaluation(state, joueur, adversaire):
     adversaire_moves = len(get_possible_moves(state, adversaire))
 
     score += (joueur_moves - adversaire_moves) * 5
+
+    joueur_blocked = count_blocked_columns(board, joueur)
+    adversaire_blocked = count_blocked_columns(board, adversaire)
+    score += (adversaire_blocked - joueur_blocked) * 15
 
     return score
 
