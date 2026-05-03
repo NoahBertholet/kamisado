@@ -344,6 +344,15 @@ def serialize_state(state, joueur):
 
     return (pieces, make_hashable(state["color"]), joueur)
 
+def evict_transposition_table():
+    global TRANSPOSITION_TABLE
+    if len(TRANSPOSITION_TABLE) <= CACHE_MAX_SIZE:
+        return
+    keys = list(TRANSPOSITION_TABLE.keys())
+    evict_count = len(keys) // 5  # supprimer 20%
+    for i in keys[:evict_count]:
+        del TRANSPOSITION_TABLE[i]
+
 def negamax(state, depth, alpha, beta, joueur, adversaire):
     check_timeout()
 
