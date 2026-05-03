@@ -384,6 +384,11 @@ def negamax(state, depth, alpha, beta, joueur, adversaire):
 
     if not moves:
         return -1000
+    
+    if opponent_can_win_next_turn(state, adversaire):
+        score = -90000 - depth
+        TRANSPOSITION_TABLE[key] = (depth, score, "EXACT")
+        return score
 
     moves = sort_moves(moves, joueur)
     moves = moves[:MAX_NEGAMAX_MOVES]
