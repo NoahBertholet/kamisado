@@ -97,6 +97,10 @@ def receive_json(sock):
 
 def get_my_kind(state):
     players = state["players"]
+    
+    if BOT_NAME not in players:
+        raise ValueError(f"{BOT_NAME} Joueur non trouvé dans la liste des joueurs: {players}")
+ 
     my_index = players.index(BOT_NAME)
 
     if state["current"] != my_index:
