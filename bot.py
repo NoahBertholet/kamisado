@@ -431,8 +431,7 @@ def negamax(state, depth, alpha, beta, joueur, adversaire):
     else:
         flag = "EXACT"
 
-    if len(TRANSPOSITION_TABLE) > CACHE_MAX_SIZE:
-        TRANSPOSITION_TABLE.clear()
+    evict_transposition_table()
 
     TRANSPOSITION_TABLE[key] = (depth, meilleur_score, flag)
 
