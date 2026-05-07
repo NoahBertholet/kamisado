@@ -97,6 +97,10 @@ def receive_json(sock):
 
 def get_my_kind(state):
     players = state["players"]
+    
+    if BOT_NAME not in players:
+        raise ValueError(f"{BOT_NAME} Joueur non trouvé dans la liste des joueurs: {players}")
+ 
     my_index = players.index(BOT_NAME)
 
     if state["current"] != my_index:
@@ -226,6 +230,32 @@ def opponent_can_win_next_turn(state, opponent_kind):
 
     return False
 
+def count_blocked_columns(board, kind):
+    
+    directions = DIRECTIONS[kind]
+    blocked = 0
+ 
+    for r in range(8):
+        for c in range(8):
+            piece = board[r][c][1]
+            if piece is None:
+                continue 
+            _, piece_kind = piece
+            if piece_kind != kind:
+                continue
+ 
+            has_move = False
+            for dr, dc in directions:
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < 8 and 0 <= nc < 8 and board[nr][nc][1] is None:
+                    has_move = True
+                    break
+ 
+            if not has_move:
+                blocked += 1
+ 
+    return blocked
+
 def evaluation(state, joueur, adversaire):
     board = state["board"]
     score = 0
@@ -293,6 +323,10 @@ def evaluation(state, joueur, adversaire):
 
     score += (joueur_moves - adversaire_moves) * 5
 
+    joueur_blocked = count_blocked_columns(board, joueur)
+    adversaire_blocked = count_blocked_columns(board, adversaire)
+    score += (adversaire_blocked - joueur_blocked) * 15
+
     return score
 
 def serialize_state(state, joueur):
@@ -309,6 +343,15 @@ def serialize_state(state, joueur):
     )
 
     return (pieces, make_hashable(state["color"]), joueur)
+
+def evict_transposition_table():
+    global TRANSPOSITION_TABLE
+    if len(TRANSPOSITION_TABLE) <= CACHE_MAX_SIZE:
+        return
+    keys = list(TRANSPOSITION_TABLE.keys())
+    evict_count = len(keys) // 5  # supprimer 20%
+    for i in keys[:evict_count]:
+        del TRANSPOSITION_TABLE[i]
 
 def negamax(state, depth, alpha, beta, joueur, adversaire):
     check_timeout()
@@ -341,6 +384,11 @@ def negamax(state, depth, alpha, beta, joueur, adversaire):
 
     if not moves:
         return -1000
+    
+    if opponent_can_win_next_turn(state, adversaire):
+        score = -90000 - depth
+        TRANSPOSITION_TABLE[key] = (depth, score, "EXACT")
+        return score
 
     moves = sort_moves(moves, joueur)
     moves = moves[:MAX_NEGAMAX_MOVES]
@@ -383,8 +431,7 @@ def negamax(state, depth, alpha, beta, joueur, adversaire):
     else:
         flag = "EXACT"
 
-    if len(TRANSPOSITION_TABLE) > CACHE_MAX_SIZE:
-        TRANSPOSITION_TABLE.clear()
+    evict_transposition_table()
 
     TRANSPOSITION_TABLE[key] = (depth, meilleur_score, flag)
 
